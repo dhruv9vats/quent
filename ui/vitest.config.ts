@@ -15,7 +15,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'packages/@quent/*/src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', 'dist'],
     reporters: ['default', 'junit'],
     outputFile: {

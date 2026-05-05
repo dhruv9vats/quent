@@ -1,3 +1,15 @@
+packages:
+  - 'packages/@quent/*'
+  # Examples (under ui/examples/) are intentionally NOT part of this
+  # workspace. They are opt-in: their dependencies are not installed by
+  # `pnpm install` here and they are not built by `pnpm ci:check`. To work
+  # on an example, run pnpm from inside its folder, where a nested
+  # `pnpm-workspace.yaml` re-references `../../packages/@quent/*` so its
+  # `workspace:*` deps still resolve to source.
+
 allowBuilds:
+  '@parcel/watcher': true
+  '@swc/core': true
   esbuild: true
   msw: true
+  protobufjs: true
