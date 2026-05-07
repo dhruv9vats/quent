@@ -30,7 +30,7 @@ import { entityRefToEntitiesKey } from './queryBundle.utils';
 import { collectResourceTypesFromTree, getIconForType } from './resource.utils';
 import { EntityTypeValue, EntityRefKey, EntityTypeKey } from '@quent/utils';
 import type { EChartsInstance } from 'echarts-for-react';
-import { connect, getInstanceByDom } from './echarts';
+import { connect } from './echarts';
 import { CHART_GROUP } from '../timeline/Timeline';
 
 // Suppress unused import warning — getColorForKey is used by consumers of this module
@@ -354,50 +354,30 @@ export function getTimelineXAxisIntervalMs(spanMs: number, targetSplits: number 
   return maxAllowedStep;
 }
 
-function findExistingChartInGroup(chartGroup: string): EChartsInstance | null {
-  const chartElements = document.querySelectorAll('[_echarts_instance_]');
-  for (const el of chartElements) {
-    const instance = getInstanceByDom(el as HTMLElement);
-    if (instance && instance.group === chartGroup) {
-      return instance as unknown as EChartsInstance;
-    }
-  }
-  return null;
-}
-
 /**
- * Get the current zoom state from any existing chart in the group.
- * Returns null if no charts exist or no zoom state is set.
+ * Join `instance` to the named connect group and seed its dataZoom from the
+ * caller-supplied zoom percentages. Callers (React components/hooks) are
+ * expected to read the live zoom from `zoomRangeAtom` and pass it in here —
+ * the atom is the single source of truth, so this utility never touches it
+ * directly (per `ui/AGENTS.md` atoms are React-only).
+ *
+ * Pass `zoomPct = null` to skip seeding (e.g. when no zoom has been
+ * established yet, like a 0-duration query).
  */
-export function getChartGroupZoomState(
-  chartGroup: string = CHART_GROUP
-): { start: number; end: number } | null {
-  const existingInstance = findExistingChartInGroup(chartGroup);
-  if (existingInstance) {
-    const existingOption = existingInstance.getOption();
-    const dataZoomOption = existingOption.dataZoom as Array<{ start?: number; end?: number }>;
-
-    if (dataZoomOption?.[0]?.start !== undefined && dataZoomOption?.[0]?.end !== undefined) {
-      return { start: dataZoomOption[0].start, end: dataZoomOption[0].end };
-    }
-  }
-  return null;
-}
-
 export const connectChart = (
   instance: EChartsInstance,
   chartGroup: string = CHART_GROUP,
-  activateBrushSelect = true
+  activateBrushSelect = true,
+  zoomPct: { start: number; end: number } | null = null
 ) => {
   // Apply current zoom to this chart without replacing its dataZoom components.
   // setOption({ dataZoom: [zoomState] }) would replace the array and break slider/inside config.
-  const zoomState = getChartGroupZoomState(chartGroup);
-  if (zoomState) {
+  if (zoomPct) {
     instance.dispatchAction({
       type: 'dataZoom',
       dataZoomIndex: 0,
-      start: zoomState.start,
-      end: zoomState.end,
+      start: zoomPct.start,
+      end: zoomPct.end,
     });
   }
 

@@ -11,7 +11,6 @@ import { formatDuration } from '@quent/utils';
 import type { ZoomRange } from '@quent/utils';
 import {
   buildBinnedTimelineSeries,
-  connectChart,
   getAdaptiveNumBins,
   getTimelineXAxisIntervalMs,
   MIN_ZOOM_WINDOW_S,
@@ -19,6 +18,7 @@ import {
   registerAxisPointerSync,
   unregisterAxisPointerSync,
 } from '../lib/timeline.utils';
+import { useChartConnect } from '../lib/useChartConnect';
 import { TIMELINE_X_AXIS_ANIMATION, TIMELINE_SPACING } from './types';
 import type { SingleTimelineResponse } from '@quent/utils';
 import { useTimelineEchartsTheme } from './timelineEchartsTheme';
@@ -291,19 +291,32 @@ export function TimelineController({
     };
   }, [onZoomChange, durationSeconds]);
 
-  const instanceRef = useRef<EChartsInstance | null>(null);
   const selfTriggeredRef = useRef(false);
-  const [chartReady, setChartReady] = useState(false);
+  // Increments on every chart-ready event so the restore effect re-fires when
+  // the underlying ECharts instance is recreated (e.g. on theme change, which
+  // disposes and re-creates the chart and would otherwise leave the new
+  // instance at its default 0–100% zoom).
+  const [readyTick, setReadyTick] = useState(0);
 
   const zoomRange = useZoomRange();
 
-  // Restore the dataZoom slider position from the persisted atom whenever
-  // either the zoom range changes or the chart instance becomes ready.
-  // Gating on `chartReady` is required so that on remount (e.g. tab switch
-  // back to /timeline) the saved zoom is re-applied after `handleChartReady`
-  // sets `instanceRef.current`.
+  const onChartReady = useCallback((instance: EChartsInstance) => {
+    registerAxisPointerSync(instance, 0);
+    setReadyTick(t => t + 1);
+  }, []);
+
+  const { handleChartReady, instanceRef } = useChartConnect({
+    durationSeconds,
+    activateBrushSelect: true,
+    onReady: onChartReady,
+  });
+
+  // Restore the dataZoom slider position from the persisted atom whenever the
+  // zoom range changes or a (re)created chart instance becomes ready. The
+  // `readyTick` dependency ensures recreated instances inherit the saved zoom
+  // even when the atom value itself is unchanged across the remount.
   useEffect(() => {
-    if (!chartReady) return;
+    if (readyTick === 0) return;
     if (selfTriggeredRef.current) {
       selfTriggeredRef.current = false;
       return;
@@ -314,20 +327,17 @@ export function TimelineController({
     const startPct = (zoomRange.start / durationSeconds) * 100;
     const endPct = (zoomRange.end / durationSeconds) * 100;
 
+    // Mute the dataZoom event our own dispatch is about to emit, so the
+    // recreated chart's initial restore doesn't echo back through onZoomChange
+    // and overwrite the atom (which would visibly snap the bounds back).
+    selfTriggeredRef.current = true;
     instance.dispatchAction({
       type: 'dataZoom',
       dataZoomIndex: 0,
       start: startPct,
       end: endPct,
     });
-  }, [chartReady, zoomRange, durationSeconds]);
-
-  const handleChartReady = useCallback((instance: EChartsInstance) => {
-    instanceRef.current = instance;
-    connectChart(instance);
-    registerAxisPointerSync(instance, 0);
-    setChartReady(true);
-  }, []);
+  }, [readyTick, zoomRange, durationSeconds, instanceRef]);
 
   useEffect(() => {
     return () => {
@@ -336,7 +346,7 @@ export function TimelineController({
         instanceRef.current = null;
       }
     };
-  }, []);
+  }, [instanceRef]);
 
   return (
     <ReactEChartsComponent
