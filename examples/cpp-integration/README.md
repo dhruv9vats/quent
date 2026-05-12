@@ -30,7 +30,7 @@ cmake --build build
 ./build/example
 ```
 
-This produces an ndjson file in `cpp/data/`.
+This produces an ndjson file in `cpp/events/`.
 Each line is a JSON object with `id`, `timestamp`, and `data` fields.
 
 ## Event output
