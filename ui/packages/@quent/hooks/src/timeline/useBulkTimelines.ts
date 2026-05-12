@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAtomValue, useStore } from 'jotai';
 import { fetchBulkTimelines, DEFAULT_STALE_TIME } from '@quent/client';
 import type { QueryEntities, TimelineRequest, TaskFilter, ZoomRange } from '@quent/utils';
+import { MAX_TIMELINE_BINS } from '@quent/utils';
 import { getResourceTypeName, getFsmTypeName } from './timeline.utils';
 import {
   timelineCacheKey,
@@ -32,7 +33,6 @@ export interface TreeNode {
 }
 
 const ZOOM_DEBOUNCE_MS = 150;
-const MAX_TIMELINE_BINS = 400;
 
 /**
  * useBulkTimelines — manages bulk fetching via Jotai atoms + TanStack Query.

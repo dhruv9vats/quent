@@ -42,8 +42,9 @@ export {
 // Rust-generated TypeScript types
 export * from './types/index';
 
-// Timeline types
+// Timeline types and constants
 export type { ZoomRange } from './types/ZoomRange';
+export const MAX_TIMELINE_BINS = 200;
 
 // Entity types (from ui/src/types.ts)
 export { EntityTypeKey } from './entityTypes';

@@ -32,11 +32,10 @@ import { EntityTypeValue, EntityRefKey, EntityTypeKey } from '@quent/utils';
 import type { EChartsInstance } from 'echarts-for-react';
 import { connect } from './echarts';
 import { CHART_GROUP } from '../timeline/Timeline';
+import { MAX_TIMELINE_BINS } from '@quent/utils';
 
 // Suppress unused import warning — getColorForKey is used by consumers of this module
 void getColorForKey;
-
-export const MAX_TIMELINE_BINS = 400;
 const LONG_ENTITIES_BIN_MULTIPLIER = 30;
 
 /** Minimum bin duration in nanoseconds — prevents ECharts from stacking bins when zoomed too far. */
