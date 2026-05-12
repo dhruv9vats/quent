@@ -11,7 +11,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 /// Configuration of the window and number of bins of a timeline.
-#[derive(TS, Debug, Clone, Serialize, Deserialize)]
+#[derive(TS, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct TimelineConfig {
     /// The number of bins for binned timelines.
     pub num_bins: u16,
@@ -123,6 +123,20 @@ pub struct SingleTimelineRequest<GlobalParams, TimelineParams> {
 pub struct BulkTimelineRequest<GlobalParams, TimelineParams> {
     /// The list of timelines requested.
     pub entries: HashMap<String, TimelineRequest<TimelineParams>>,
+    /// Global application-specific parameters, e.g. filters.
+    pub app_params: GlobalParams,
+}
+
+/// Bulk request that asks for multiple time windows per entry in a single
+/// analyzer call.
+///
+/// The embedded `config` on each `TimelineRequest` is ignored — the actual
+/// time windows come from the top-level `configs` vector and apply to every
+/// entry. See `UiAnalyzer::bulk_chunked_resource_timeline`.
+#[derive(Debug, Clone)]
+pub struct BulkChunkedTimelineRequest<GlobalParams, TimelineParams> {
+    pub entries: HashMap<String, TimelineRequest<TimelineParams>>,
+    pub configs: Vec<TimelineConfig>,
     /// Global application-specific parameters, e.g. filters.
     pub app_params: GlobalParams,
 }

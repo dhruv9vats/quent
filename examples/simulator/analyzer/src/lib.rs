@@ -9,9 +9,12 @@ use quent_ui::{
     FiniteStateMachine, ResourceGroupNode, ResourceTree, convert_resource_tree,
     quantity::QuantitySpec,
     timeline::{
-        request::{BulkTimelineRequest, EntityFilter, SingleTimelineRequest, TimelineRequest},
+        request::{
+            BulkChunkedTimelineRequest, BulkTimelineRequest, EntityFilter, SingleTimelineRequest,
+            TimelineRequest,
+        },
         response::{
-            BulkTimelinesResponse, BulkTimelinesResponseEntry,
+            BulkChunkedTimelinesResponse, BulkTimelinesResponse, BulkTimelinesResponseEntry,
             ResourceTimeline as UiResourceTimeline, ResourceTimelineBinned,
             ResourceTimelineBinnedByState, SingleTimelineResponse,
         },
@@ -19,6 +22,7 @@ use quent_ui::{
 };
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::collections::HashMap as StdHashMap;
+use std::sync::Arc;
 use tracing::debug;
 
 use quent_analyzer::{
@@ -48,6 +52,22 @@ pub mod view;
 
 pub struct SimulatorUiAnalyzer {
     pub model: SimulatorModel,
+}
+
+struct PlainBuilderSlot<'a> {
+    entry_id: String,
+    config_idx: usize,
+    builder: ResourceTimelineBuilder<'a>,
+    resource_id_filter: Arc<HashSet<Uuid>>,
+    task_filter: TaskFilter,
+}
+
+struct PerStateBuilderSlot<'a> {
+    entry_id: String,
+    config_idx: usize,
+    builder: ResourceTimelineByKeyBuilder<'a, &'a str>,
+    resource_id_filter: Arc<HashSet<Uuid>>,
+    task_filter: TaskFilter,
 }
 
 impl UiAnalyzer for SimulatorUiAnalyzer {
@@ -235,7 +255,7 @@ impl UiAnalyzer for SimulatorUiAnalyzer {
         let epoch = self
             .query_engine_model()
             .query_epoch(request.app_params.query_id)?;
-        let config = request.entry.config().clone().try_into_binned_span(epoch)?;
+        let config = request.entry.config().try_into_binned_span(epoch)?;
         let config_secs = config.try_to_secs_relative(epoch)?;
 
         match request.entry {
@@ -370,7 +390,7 @@ impl UiAnalyzer for SimulatorUiAnalyzer {
         )> = Vec::new();
 
         for (entry_id, entry) in request.entries {
-            let entry_config = entry.config().clone().try_into_binned_span(epoch)?;
+            let entry_config = entry.config().try_into_binned_span(epoch)?;
             let BulkEntryPrep {
                 resource_type,
                 resource_id_filter,
@@ -511,6 +531,182 @@ impl UiAnalyzer for SimulatorUiAnalyzer {
         }
 
         Ok(BulkTimelinesResponse { entries })
+    }
+
+    fn bulk_chunked_resource_timeline(
+        &self,
+        request: BulkChunkedTimelineRequest<Self::TimelineGlobalParams, Self::TimelineParams>,
+    ) -> AnalyzerResult<BulkChunkedTimelinesResponse> {
+        let epoch = self
+            .query_engine_model()
+            .query_epoch(request.app_params.query_id)?;
+        let view = self.model.query_view(request.app_params.query_id)?;
+        let resource_tree = view.resource_tree()?;
+
+        let n_configs = request.configs.len();
+
+        let mut plain_builders: Vec<PlainBuilderSlot<'_>> =
+            Vec::with_capacity(request.entries.len() * n_configs);
+        let mut per_state_builders: Vec<PerStateBuilderSlot<'_>> =
+            Vec::with_capacity(request.entries.len() * n_configs);
+
+        // Per-entry prep runs once; the builders for that entry's N configs all share it.
+        for (entry_id, entry) in &request.entries {
+            let BulkEntryPrep {
+                resource_type,
+                resource_id_filter,
+                entity_filter,
+                task_filter,
+                long_entities_threshold,
+            } = self.try_prepare_bulk_entry(entry.clone(), &resource_tree)?;
+
+            // Wrap the filter once so per-config slots share one allocation.
+            let resource_id_filter = Arc::new(resource_id_filter);
+
+            for (config_idx, config) in request.configs.iter().enumerate() {
+                let entry_config = config.try_into_binned_span(epoch)?;
+                if entity_filter.entity_type_name.is_some() {
+                    per_state_builders.push(PerStateBuilderSlot {
+                        entry_id: entry_id.clone(),
+                        config_idx,
+                        builder: ResourceTimelineByKeyBuilder::try_new(
+                            resource_type,
+                            entry_config,
+                            long_entities_threshold,
+                        )?,
+                        resource_id_filter: Arc::clone(&resource_id_filter),
+                        task_filter: task_filter.clone(),
+                    });
+                } else {
+                    plain_builders.push(PlainBuilderSlot {
+                        entry_id: entry_id.clone(),
+                        config_idx,
+                        builder: ResourceTimelineBuilder::try_new(
+                            resource_type,
+                            entry_config,
+                            long_entities_threshold,
+                        )?,
+                        resource_id_filter: Arc::clone(&resource_id_filter),
+                        task_filter: task_filter.clone(),
+                    });
+                }
+            }
+        }
+
+        let plain_index: HashMap<Uuid, Vec<usize>> = plain_builders
+            .iter()
+            .enumerate()
+            .flat_map(|(builder_idx, slot)| {
+                slot.resource_id_filter
+                    .iter()
+                    .map(move |&resource_id| (resource_id, builder_idx))
+            })
+            .fold(HashMap::default(), |mut acc, (resource_id, builder_idx)| {
+                acc.entry(resource_id).or_default().push(builder_idx);
+                acc
+            });
+        let per_state_index: HashMap<Uuid, Vec<usize>> = per_state_builders
+            .iter()
+            .enumerate()
+            .flat_map(|(builder_idx, slot)| {
+                slot.resource_id_filter
+                    .iter()
+                    .map(move |&resource_id| (resource_id, builder_idx))
+            })
+            .fold(HashMap::default(), |mut acc, (resource_id, builder_idx)| {
+                acc.entry(resource_id).or_default().push(builder_idx);
+                acc
+            });
+
+        // Single pass over all tasks/usages — the dominant cost — dispatched to
+        // every matching (entry, config) builder. Builders filter by their own
+        // span internally, so out-of-window usages are no-ops.
+        for task in self.model.tasks.values() {
+            let task_operator_id = task.operator_id();
+            for usage in task.usages() {
+                let resource_id = usage.resource_id();
+                if let Some(builder_indices) = plain_index.get(&resource_id) {
+                    for &builder_idx in builder_indices {
+                        let slot = &plain_builders[builder_idx];
+                        if slot
+                            .task_filter
+                            .operator_id
+                            .is_none_or(|op| task_operator_id == Some(op))
+                        {
+                            plain_builders[builder_idx].builder.try_push(&usage)?;
+                        }
+                    }
+                }
+            }
+            for (state_name, usage) in task.usages_with_state_names() {
+                let resource_id = usage.resource_id();
+                if let Some(builder_indices) = per_state_index.get(&resource_id) {
+                    for &builder_idx in builder_indices {
+                        let slot = &per_state_builders[builder_idx];
+                        if slot
+                            .task_filter
+                            .operator_id
+                            .is_none_or(|op| task_operator_id == Some(op))
+                        {
+                            per_state_builders[builder_idx]
+                                .builder
+                                .try_push(state_name, &usage)?;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Reassemble per-entry Vec aligned with `request.configs` order. Slots
+        // start as `None` and must all be filled by the end — every (entry,
+        // config_idx) had a builder, and every builder produces an `Ok`.
+        let mut slots: HashMap<String, Vec<Option<BulkTimelinesResponseEntry>>> = request
+            .entries
+            .keys()
+            .map(|k| (k.clone(), (0..n_configs).map(|_| None).collect()))
+            .collect();
+
+        for slot in plain_builders {
+            let built = slot.builder.build();
+            let config = built.config.try_to_secs_relative(epoch)?;
+            let resp = BulkTimelinesResponseEntry::Ok {
+                message: String::new(),
+                config,
+                data: self.timeline_to_ui(built, epoch)?,
+            };
+            slots.get_mut(&slot.entry_id).unwrap_or_else(|| {
+                panic!("known key, instead found unknown key {}", slot.entry_id)
+            })[slot.config_idx] = Some(resp);
+        }
+        for slot in per_state_builders {
+            let built = slot.builder.build();
+            let config = built.config.try_to_secs_relative(epoch)?;
+            let resp = BulkTimelinesResponseEntry::Ok {
+                message: String::new(),
+                config,
+                data: self.timeline_to_ui_keyed(built, epoch)?,
+            };
+            slots.get_mut(&slot.entry_id).unwrap_or_else(|| {
+                panic!("known key, instead found unknown key {}", slot.entry_id)
+            })[slot.config_idx] = Some(resp);
+        }
+
+        let entries = slots
+            .into_iter()
+            .map(|(k, v)| {
+                let v = v
+                    .into_iter()
+                    .map(|opt| {
+                        opt.ok_or(AnalyzerError::BrokenImpl(
+                            "chunked bulk: missing builder slot",
+                        ))
+                    })
+                    .collect::<AnalyzerResult<Vec<_>>>()?;
+                Ok((k, v))
+            })
+            .collect::<AnalyzerResult<std::collections::HashMap<_, _>>>()?;
+
+        Ok(BulkChunkedTimelinesResponse { entries })
     }
 }
 

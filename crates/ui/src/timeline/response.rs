@@ -74,3 +74,13 @@ pub struct BulkTimelinesResponse {
     /// The timeline responses, keyed by the same keys as the request entries.
     pub entries: HashMap<String, BulkTimelinesResponseEntry>,
 }
+
+/// Response for a chunked bulk timeline request.
+///
+/// Each entry's `Vec` has one slot per `config` in the request, in the same
+/// order. Slots are independent — a chunk failing produces an `Error` slot
+/// without affecting its peers.
+#[derive(Debug)]
+pub struct BulkChunkedTimelinesResponse {
+    pub entries: HashMap<String, Vec<BulkTimelinesResponseEntry>>,
+}
