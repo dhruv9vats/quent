@@ -113,7 +113,9 @@ export function TimelineController({
       z: 1,
     };
 
-    return [zoomControlSeries, staticDisplaySeries];
+    // staticDisplaySeries first so ECharts treats xAxis[0] (full range) as
+    // the primary tooltip axis — synced times outside xAxis[1]'s zoom render.
+    return [staticDisplaySeries, zoomControlSeries];
   }, [timestamps, hasSeriesData, seriesData]);
 
   const endTimeMillis = startTimeMillis + durationSeconds * 1000;
@@ -160,6 +162,8 @@ export function TimelineController({
       axisTick: { show: false },
       axisLabel: { show: false },
       splitLine: { show: false },
+      // Suppress pointer on the dataZoom'd axis — only xAxis[0] draws the crosshair.
+      axisPointer: { show: false },
     }),
     [startTimeMillis, endTimeMillis]
   );
@@ -203,9 +207,17 @@ export function TimelineController({
 
   const eChartOptions: EChartsOption = useMemo(() => {
     return {
-      tooltip: { show: true, showContent: false, trigger: 'axis' },
+      tooltip: {
+        show: true,
+        showContent: false,
+        trigger: 'axis',
+        // Pin to xAxis[0] (full range) so synced times outside the dataZoom
+        // window of xAxis[1] still resolve and render a crosshair.
+        axisPointer: { axis: 'x', xAxisIndex: 0 },
+      },
+      // Link only the static axis so the dataZoom'd xAxis[1] doesn't draw a second crosshair.
       axisPointer: {
-        link: [{ xAxisIndex: 'all' }],
+        link: [{ xAxisIndex: [0] }],
       },
       grid: gridOptions,
       dataZoom: [
