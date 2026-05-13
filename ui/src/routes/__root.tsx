@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { createRootRoute, Link, Outlet, useRouterState } from '@tanstack/react-router';
-import { TanStackRouterDevtools } from '@tanstack/router-devtools';
+import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { NavBarNavigator } from '@/components/NavBarNavigator';

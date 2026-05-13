@@ -49,7 +49,7 @@
     "@tanstack/react-router": "^1.166.2",
     "@tanstack/react-table": "^8.20.5",
     "@tanstack/react-virtual": "^3.13.23",
-    "@tanstack/router-devtools": "^1.166.2",
+    "@tanstack/react-router-devtools": "^1.166.2",
     "@xyflow/react": "^12.10.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
