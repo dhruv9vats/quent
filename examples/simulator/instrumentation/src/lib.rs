@@ -15,6 +15,7 @@ entity! {
     Network: ResourceGroup {}
 }
 
+pub use quent_stdlib::{channel, memory, processor};
 pub use task::TaskEvent;
 
 model! {

@@ -1849,6 +1849,7 @@ dependencies = [
  "quent-readme-example",
  "quent-simulator-instrumentation",
  "quote",
+ "serde",
  "syn",
 ]
 

@@ -832,9 +832,15 @@ fn emit_state_flat_args(
     state: &StateDef,
     q: &syn::Path,
     component_mod_str: &str,
+    options: &CxxOptions,
 ) -> (TokenStream, Vec<TokenStream>) {
     let mut stmts = Vec::new();
     let mut args = Vec::new();
+
+    // FSM state attributes can include model structs. The CXX bridge receives
+    // its own ffi::Struct copy, but the model callback expects the real struct
+    // under the instrumentation crate facade.
+    let component_mod: syn::Path = syn::parse_str(component_mod_str).unwrap();
 
     // Attributes become flat args — instance_name first (as &str), then others
     for attr in &state.attributes {
@@ -876,6 +882,48 @@ fn emit_state_flat_args(
                     args.push(quote! { #q::Ref::new(#q::uuid::Uuid::from(data.#field_name)) });
                 }
             }
+            ValueType::CustomAttributes if !attr.optional => {
+                // Keep FSM state conversion aligned with entity/event payload
+                // conversion before calling the model callback.
+                args.push(quote! { data.#field_name.into_model() });
+            }
+            ValueType::Struct(type_path, inner_attrs) if !attr.optional => {
+                // Convert ffi::SomeStruct into instrumentation_crate::module::SomeStruct.
+                // Without this, Rust sees two distinct structs with identical fields.
+                let conversion = emit_struct_conversion(type_path, inner_attrs, q, &component_mod);
+                args.push(quote! {
+                    {
+                        let data = data.#field_name;
+                        #conversion
+                    }
+                });
+            }
+            ValueType::List(inner) if !attr.optional => match inner.as_ref() {
+                ValueType::Ref(_) => {
+                    args.push(quote! {
+                        data.#field_name
+                            .into_iter()
+                            .map(|u| #q::Ref::new(#q::uuid::Uuid::from(u)))
+                            .collect()
+                    });
+                }
+                ValueType::Uuid => {
+                    args.push(quote! {
+                        data.#field_name
+                            .into_iter()
+                            .map(|u| #q::uuid::Uuid::from(u))
+                            .collect()
+                    });
+                }
+                ValueType::Struct(type_path, inner_attrs) => {
+                    let conversion =
+                        emit_struct_conversion(type_path, inner_attrs, q, &component_mod);
+                    args.push(quote! {
+                        data.#field_name.into_iter().map(|data| { #conversion }).collect()
+                    });
+                }
+                _ => args.push(quote! { data.#field_name }),
+            },
             _ => {
                 if attr.optional {
                     // Optional numeric: always wrap in Some — C++ provides concrete values.
@@ -892,16 +940,24 @@ fn emit_state_flat_args(
     for usage in &state.usages {
         let resource_id_field = format_ident!("{}_resource_id", usage.field_name);
         let alias = format_ident!("__{}Capacity", to_pascal_case(&usage.field_name));
+
         // Resource type paths may be bare names (e.g., "Queue") for types in the
-        // same crate, or qualified (e.g., "quent_stdlib::processor::Processor"). Bare names
-        // need to be resolved against the component's module path.
+        // same crate, or qualified (e.g., "quent_stdlib::processor::Processor").
+        // The bridge should depend on the instrumentation crate facade, so
+        // qualified paths are remapped through that facade:
+        //
+        //   quent_stdlib::memory::Memory
+        //
+        // becomes instrumentation_crate::memory::Memory.
         let resource_ty: syn::Type = {
             let path = &usage.resource_type_path;
-            if path.contains("::") {
-                syn::parse_str(path).unwrap()
+            let resource_path = if path.contains("::") {
+                remap_module_path(path, options)
             } else {
-                syn::parse_str(&format!("{}::{}", component_mod_str, path)).unwrap()
-            }
+                format!("{}::{}", component_mod_str, path)
+            };
+
+            syn::parse_str(&resource_path).unwrap()
         };
 
         stmts.push(quote! {
@@ -1051,7 +1107,7 @@ fn emit_fsm_bridge(fsm: &FsmDef, model_name: &str, options: &CxxOptions) -> Gene
                     }
                 }
             } else {
-                let (stmts, args) = emit_state_flat_args(state, &q, &remapped);
+                let (stmts, args) = emit_state_flat_args(state, &q, &remapped, options);
                 quote! {
                     pub fn #method_name(&mut self, data: ffi::#state_pascal_ident) {
                         #stmts
@@ -1064,7 +1120,7 @@ fn emit_fsm_bridge(fsm: &FsmDef, model_name: &str, options: &CxxOptions) -> Gene
 
     let observer_name = format_ident!("{}Observer", pascal_name);
     let factory_fn = if has_entry_data {
-        let (stmts, args) = emit_state_flat_args(entry_state, &q, &remapped);
+        let (stmts, args) = emit_state_flat_args(entry_state, &q, &remapped, options);
         quote! {
             pub fn create(ctx: &super::context::Context, data: ffi::#entry_pascal) -> Box<#handle_name> {
                 #stmts
