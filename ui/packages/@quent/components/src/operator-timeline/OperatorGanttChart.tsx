@@ -21,6 +21,7 @@ import {
   useSelectedNodeIds,
   useSetSelectedNodeIds,
   useSetSelectedOperatorLabel,
+  useSetSelectedNodeData,
   useSetSelectedPlanId,
   useNodeColoringValue,
   useNodeColorPalette,
@@ -61,6 +62,7 @@ export function OperatorGanttChart({
   const setSelectedNodeIds = useSetSelectedNodeIds();
   const setSelectedOperatorLabel = useSetSelectedOperatorLabel();
   const setSelectedPlanId = useSetSelectedPlanId();
+  const setSelectedNodeData = useSetSelectedNodeData();
   const { themeName, textColor } = useTimelineEchartsTheme(isDark);
   const nodeColoring = useNodeColoringValue();
   const [nodePalette] = useNodeColorPalette();
@@ -296,16 +298,30 @@ export function OperatorGanttChart({
         if (selectedNodeIds.has(op.operatorId)) {
           setSelectedNodeIds(new Set());
           setSelectedOperatorLabel(null);
+          setSelectedNodeData(null);
         } else {
           setSelectedNodeIds(new Set([op.operatorId]));
           setSelectedOperatorLabel(op.label);
+          setSelectedNodeData({
+            nodeId: op.operatorId,
+            label: op.label,
+            operationType: op.typeName,
+            statistics: op.statistics,
+          });
           if (op.planId) {
             setSelectedPlanId(op.planId);
           }
         }
       },
     }),
-    [operators, selectedNodeIds, setSelectedNodeIds, setSelectedOperatorLabel, setSelectedPlanId]
+    [
+      operators,
+      selectedNodeIds,
+      setSelectedNodeIds,
+      setSelectedOperatorLabel,
+      setSelectedPlanId,
+      setSelectedNodeData,
+    ]
   );
 
   // Join timeline-sync-group for frame-rate-level x-axis zoom sync via ECharts connect().

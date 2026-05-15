@@ -21,7 +21,6 @@ import {
   useNodeColorPalette,
   useEffectiveHighlightedNodeIds,
   useEffectiveHoveredStat,
-  useSetHoveredNodeData,
   useSetHighlightedNodeIds,
 } from '@quent/hooks';
 import { parseCustomStatistics } from '../lib/queryBundle.utils';
@@ -101,7 +100,6 @@ export const QueryPlanNode = memo(({ data }: { data: QueryPlanNodeData }) => {
   const [nodeLabelField] = useSelectedNodeLabelField();
   const { fieldColor, isDimmed, isSelected, colorField } = useNodeColoring(operatorId, isDark);
   const [isHoveredLocal, setIsHoveredLocal] = useState(false);
-  const setHoveredNodeData = useSetHoveredNodeData();
 
   const resolvedLabel = useMemo(() => {
     if (nodeLabelField === NODE_LABEL_FIELD.ID) return data.metadata?.rawNode?.id ?? data.nodeId;
@@ -144,12 +142,6 @@ export const QueryPlanNode = memo(({ data }: { data: QueryPlanNodeData }) => {
 
   const onMouseEnter = useCallback(() => {
     setIsHoveredLocal(true);
-    setHoveredNodeData({
-      nodeId: data.nodeId,
-      label: data.label,
-      operationType: data.operationType,
-      statistics,
-    });
     if (operatorId) {
       setHighlightState(prev => ({
         ...prev,
@@ -158,24 +150,15 @@ export const QueryPlanNode = memo(({ data }: { data: QueryPlanNodeData }) => {
         primaryOperatorId: operatorId,
       }));
     }
-  }, [
-    data.nodeId,
-    data.label,
-    data.operationType,
-    statistics,
-    operatorId,
-    setHighlightState,
-    setHoveredNodeData,
-  ]);
+  }, [operatorId, setHighlightState]);
   const onMouseLeave = useCallback(() => {
     setIsHoveredLocal(false);
-    setHoveredNodeData(null);
     setHighlightState(prev =>
       prev.source === 'dag' && prev.ids?.size === 1 && prev.ids.has(operatorId)
         ? { ...prev, ids: null, source: null, primaryOperatorId: null }
         : prev
     );
-  }, [operatorId, setHighlightState, setHoveredNodeData]);
+  }, [operatorId, setHighlightState]);
 
   const nodeContent = (
     <div
