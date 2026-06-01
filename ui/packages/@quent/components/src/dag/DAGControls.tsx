@@ -41,11 +41,11 @@ export const DAGControls = ({ operatorStatFields, portStatFields, isDark }: DAGC
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="border-b bg-card">
       <div className="flex items-center justify-between px-4 py-2">
-        <CollapsibleTrigger className="flex items-center gap-2 group">
+        <CollapsibleTrigger className="flex items-center gap-2 group cursor-pointer">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             Plan Controls
           </span>
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 cursor-pointer group-data-[state=open]:rotate-180" />
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
         </CollapsibleTrigger>
         <DAGSettingsPopover isDark={isDark} />
       </div>
