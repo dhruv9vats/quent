@@ -9,7 +9,8 @@ use quent_schema::{
     constraint::Constraint,
     data_type::DataType,
     entity::Entity,
-    event::{Cardinality, Event, EventField},
+    event::{Cardinality, Event},
+    field::Field,
     identifier::Identifier,
 };
 
@@ -39,15 +40,15 @@ fn ref_with(constraint: Constraint) -> DataType {
     }
 }
 
-fn field(name: &str, ty: DataType) -> EventField {
-    EventField {
+fn field(name: &str, ty: DataType) -> Field {
+    Field {
         name: ident(name),
         ty,
         annotations: Annotations::default(),
     }
 }
 
-fn event(name: &str, payload: Vec<EventField>) -> Event {
+fn event(name: &str, payload: Vec<Field>) -> Event {
     Event {
         name: ident(name),
         cardinality: Cardinality::Once,
