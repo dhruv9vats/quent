@@ -744,8 +744,7 @@ fn qualify_struct_path(type_path: &str, component_mod: &syn::Path) -> syn::Path 
         suffix.remove(0);
     }
 
-    let mut segments =
-        syn::punctuated::Punctuated::<syn::PathSegment, syn::token::PathSep>::new();
+    let mut segments = syn::punctuated::Punctuated::<syn::PathSegment, syn::token::PathSep>::new();
     for segment in prefix.into_iter().chain(suffix) {
         segments.push(segment);
     }
