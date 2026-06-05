@@ -74,6 +74,18 @@ impl std::fmt::Display for Identifier {
     }
 }
 
+impl PartialEq<str> for Identifier {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<&str> for Identifier {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == **other
+    }
+}
+
 impl<T> AsRef<T> for Identifier
 where
     T: ?Sized,
@@ -128,6 +140,14 @@ mod tests {
     #[test]
     fn rejects_empty() {
         assert_eq!(Identifier::try_new(""), Err(IdentifierError::Empty));
+    }
+
+    #[test]
+    fn compares_to_str() {
+        let id = Identifier::try_new("foo").unwrap();
+        assert_eq!(id, "foo");
+        assert_ne!(id, "bar");
+        assert!(&id == "foo");
     }
 
     #[test]

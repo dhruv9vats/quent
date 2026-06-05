@@ -99,6 +99,7 @@ pub mod constraint;
 pub mod data_type;
 pub mod entity;
 pub mod event;
+pub mod field;
 pub mod identifier;
 pub mod metadata;
 pub mod record;

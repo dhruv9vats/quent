@@ -51,6 +51,8 @@ members = [
     # Unused preliminary crates of https://github.com/rapidsai/quent/issues/191
     "crates/constraints",
     "crates/schema",
+    "crates/ref-target",
+    "crates/fsm",
 ]
 
 # default-members excludes any crate that activates `quent-time/__test-clock-override`.
@@ -99,6 +101,7 @@ publish = false
 [workspace.dependencies]
 async-trait = "0.1.89"
 log = {version = "0.4.28", features = ["kv"]}
+petgraph = "0.8.3"
 postcard = { version = "1", features = ["alloc"] }
 prost = "0.14.1"
 rmp-serde = "1"

@@ -1992,6 +1992,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "quent-fsm"
+version = "0.1.0"
+dependencies = [
+ "petgraph",
+ "quent-constraints",
+ "quent-schema",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "quent-instrumentation"
 version = "0.1.0"
 dependencies = [
@@ -2181,6 +2193,17 @@ dependencies = [
  "pyo3",
  "quent-codegen",
  "quent-readme-example",
+]
+
+[[package]]
+name = "quent-ref-target"
+version = "0.1.0"
+dependencies = [
+ "quent-constraints",
+ "quent-schema",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

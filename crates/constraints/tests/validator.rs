@@ -8,10 +8,11 @@ use quent_schema::{
     constraint::Constraint as SchemaConstraint,
     data_type::DataType,
     entity::Entity,
-    event::{Cardinality, Event, EventField},
+    event::{Cardinality, Event},
+    field::Field,
     identifier::Identifier,
     metadata::Metadata,
-    record::{Record, RecordField},
+    record::Record,
 };
 
 fn ident(s: &str) -> Identifier {
@@ -150,7 +151,7 @@ fn unregistered_constraint_is_reported_once() {
                 name: ident("Ev"),
                 cardinality: Cardinality::Once,
                 annotations: unknown(),
-                payload: vec![EventField {
+                payload: vec![Field {
                     name: ident("ef"),
                     ty: DataType::U64,
                     annotations: unknown(),
@@ -160,7 +161,7 @@ fn unregistered_constraint_is_reported_once() {
         records: vec![Record {
             name: ident("R"),
             annotations: unknown(),
-            fields: vec![RecordField {
+            fields: vec![Field {
                 name: ident("rf"),
                 ty: DataType::U64,
                 annotations: unknown(),

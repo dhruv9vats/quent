@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeSet, HashMap, hash_map::Entry};
 
-use quent_schema::{Schema, constraint::Constraint as SchemaConstraint};
+use quent_schema::{Schema, constraint::Constraint as SchemaConstraint, data_type::DataType};
 
 /// A trait for types that implement a "constraint" of an application event
 /// model.
@@ -130,6 +130,7 @@ impl Validator {
                 check(&event.annotations.constraints);
                 for field in &event.payload {
                     check(&field.annotations.constraints);
+                    check_entity_refs(&field.ty, &mut check);
                 }
             }
         }
@@ -137,6 +138,7 @@ impl Validator {
             check(&record.annotations.constraints);
             for field in &record.fields {
                 check(&field.annotations.constraints);
+                check_entity_refs(&field.ty, &mut check);
             }
         }
 
@@ -156,5 +158,19 @@ impl Validator {
                 failures,
             })
         }
+    }
+}
+
+fn check_entity_refs(ty: &DataType, check: &mut impl FnMut(&[SchemaConstraint])) {
+    match ty {
+        DataType::Option(inner) | DataType::List(inner) => check_entity_refs(inner, check),
+        DataType::EntityRef { data, annotations } => {
+            check(&annotations.constraints);
+            if let Some(inner) = data {
+                check_entity_refs(inner, check);
+            }
+        }
+        // this doesn't need to go into records as this is walked from the top-level
+        _ => {}
     }
 }

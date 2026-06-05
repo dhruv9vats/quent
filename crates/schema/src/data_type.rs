@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::identifier::Identifier;
+use crate::{annotations::Annotations, identifier::Identifier};
 
 /// Types of data values in [`crate::event::Event`]s and [`crate::record::Record`]s.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DataType {
     Bool,
@@ -31,6 +31,11 @@ pub enum DataType {
     /// A record whose fields are determined by the instrumentation client at
     /// run-time.
     DynamicRecord,
-    /// A reference to an entity optionally carrying data.
-    EntityRef(Option<Box<DataType>>),
+    /// A reference to an entity, optionally carrying data and annotations.
+    EntityRef {
+        /// Optional payload data carried by the reference.
+        data: Option<Box<DataType>>,
+        /// Annotations of this entity reference.
+        annotations: Annotations,
+    },
 }
