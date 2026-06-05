@@ -15,6 +15,7 @@ entity! {
     Network: ResourceGroup {}
 }
 
+pub use quent_query_engine_model::{engine, operator, plan, port, query, query_group, worker};
 pub use quent_stdlib::{channel, memory, processor};
 pub use task::TaskEvent;
 

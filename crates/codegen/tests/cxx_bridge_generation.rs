@@ -7,12 +7,16 @@ use quent_codegen::{CxxOptions, emit_cxx};
 use quent_model::Model;
 
 mod fsm_struct_attrs_fixture {
-    use quent_model::{Attributes, fsm, state};
+    use quent_model::{fsm, state};
 
-    #[derive(Attributes, serde::Deserialize, serde::Serialize)]
-    pub struct MemorySpaceId {
-        pub tier: String,
-        pub device_id: i32,
+    pub mod attrs {
+        use quent_model::Attributes;
+
+        #[derive(Attributes, serde::Deserialize, serde::Serialize)]
+        pub struct MemorySpaceId {
+            pub tier: String,
+            pub device_id: i32,
+        }
     }
 
     quent_model::entity! {
@@ -22,7 +26,7 @@ mod fsm_struct_attrs_fixture {
     state! {
         Idle {
             attributes: {
-                memory_space_id: MemorySpaceId,
+                memory_space_id: attrs::MemorySpaceId,
             },
         }
     }
@@ -119,6 +123,18 @@ fn generate_query_engine_cxx_bridge() {
 
 #[test]
 fn generate_simulator_cxx_bridge() {
+    fn assert_type<T>() {}
+    assert_type::<quent_simulator_instrumentation::engine::Engine>();
+    assert_type::<quent_simulator_instrumentation::worker::Worker>();
+    assert_type::<quent_simulator_instrumentation::query_group::QueryGroup>();
+    assert_type::<quent_simulator_instrumentation::query::Query>();
+    assert_type::<quent_simulator_instrumentation::plan::Plan>();
+    assert_type::<quent_simulator_instrumentation::operator::Operator>();
+    assert_type::<quent_simulator_instrumentation::port::Port>();
+    assert_type::<quent_simulator_instrumentation::memory::Memory>();
+    assert_type::<quent_simulator_instrumentation::processor::Processor>();
+    assert_type::<quent_simulator_instrumentation::channel::Channel>();
+
     let builder = quent_simulator_instrumentation::SimulatorModel::build("Simulator");
 
     let options = CxxOptions {
@@ -182,7 +198,7 @@ fn fsm_state_struct_attributes_are_converted() {
     assert!(
         data_batch_file
             .content
-            .contains("test_instrumentation::fsm_struct_attrs_fixture::MemorySpaceId"),
+            .contains("test_instrumentation::fsm_struct_attrs_fixture::attrs::MemorySpaceId"),
         "generated FSM bridge should construct the model struct"
     );
     assert!(

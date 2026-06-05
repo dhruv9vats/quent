@@ -687,15 +687,72 @@ fn emit_struct_conversion(
     q: &syn::Path,
     component_mod: &syn::Path,
 ) -> TokenStream {
-    let type_ident: syn::Ident = syn::parse_str(type_path).unwrap();
+    let struct_path = qualify_struct_path(type_path, component_mod);
     let field_conversions: Vec<TokenStream> = attrs
         .iter()
         .map(|a| emit_field_conversion_tokens(a, q, component_mod))
         .collect();
     quote! {
-        #component_mod::#type_ident {
+        #struct_path {
             #(#field_conversions)*
         }
+    }
+}
+
+/// Resolve a model struct path into the facade path used by generated CXX bridge code.
+///
+/// Attribute metadata stores the path as it appeared at the declaration site. For
+/// example, an FSM in `my_instrumentation::task` can refer to local structs as
+/// `MemorySpaceId`, child-module structs as `attrs::MemorySpaceId`, or sibling
+/// module structs as `super::attrs::MemorySpaceId`. Generated bridge code lives
+/// outside that module, so relative paths must be qualified with the remapped
+/// component module path before constructing the real model struct.
+fn qualify_struct_path(type_path: &str, component_mod: &syn::Path) -> syn::Path {
+    let parsed: syn::Path = syn::parse_str(type_path).unwrap();
+    if parsed.leading_colon.is_some() {
+        return parsed;
+    }
+
+    let component_root = component_mod
+        .segments
+        .first()
+        .expect("component module path must not be empty")
+        .ident
+        .to_string();
+    if parsed
+        .segments
+        .first()
+        .is_some_and(|seg| seg.ident == component_root.as_str())
+    {
+        return parsed;
+    }
+
+    let mut prefix: Vec<syn::PathSegment> = component_mod.segments.iter().cloned().collect();
+    let mut suffix: Vec<syn::PathSegment> = parsed.segments.iter().cloned().collect();
+
+    if suffix.first().is_some_and(|seg| seg.ident == "crate") {
+        prefix.truncate(1);
+        suffix.remove(0);
+    } else if suffix.first().is_some_and(|seg| seg.ident == "self") {
+        suffix.remove(0);
+    }
+
+    while suffix.first().is_some_and(|seg| seg.ident == "super") {
+        prefix
+            .pop()
+            .expect("struct path cannot escape instrumentation facade");
+        suffix.remove(0);
+    }
+
+    let mut segments =
+        syn::punctuated::Punctuated::<syn::PathSegment, syn::token::PathSep>::new();
+    for segment in prefix.into_iter().chain(suffix) {
+        segments.push(segment);
+    }
+
+    syn::Path {
+        leading_colon: None,
+        segments,
     }
 }
 
