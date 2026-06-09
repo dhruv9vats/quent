@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useMemo } from 'react';
-import ReactEChartsComponent from 'echarts-for-react';
+import EChartsReactCore from 'echarts-for-react/lib/core';
 import { echarts } from '../lib/echarts';
 import type { EChartsOption } from '../lib/echarts';
 import { useZoomRange } from '@quent/hooks';
@@ -143,7 +143,7 @@ export function TimelineRuler({ startTime, isDark, mode = 'relative' }: Timeline
   ]);
 
   return (
-    <ReactEChartsComponent
+    <EChartsReactCore
       echarts={echarts}
       theme={themeName}
       option={option}
