@@ -17,7 +17,9 @@ use quote::{format_ident, quote};
 
 use quent_model::{AttributeDef, FsmDef, ModelBuilder, StateDef, ValueType};
 
-use crate::common::{pretty_print, quent_path, remap_module_path, to_pascal_case};
+use crate::common::{
+    pretty_print, quent_path, remap_module_path, resource_operating_attrs, to_pascal_case,
+};
 use crate::{CxxOptions, GeneratedFile};
 
 /// Recursively check whether any attribute in the list (or nested structs) uses `CustomAttributes`.
@@ -213,7 +215,7 @@ pub fn emit(model: &ModelBuilder, options: &CxxOptions) -> Vec<GeneratedFile> {
 
     // Generate FSM bridges
     for fsm in &model.fsms {
-        files.push(emit_fsm_bridge(fsm, &model.name, options));
+        files.push(emit_fsm_bridge(model, fsm, &model.name, options));
     }
 
     files
@@ -885,6 +887,7 @@ fn emit_entity_bridge(
 /// The state callback signature is: instance_name, attrs..., usages...
 /// where usages are `Option<Usage<T>>`.
 fn emit_state_flat_args(
+    model: &ModelBuilder,
     state: &StateDef,
     q: &syn::Path,
     component_mod_str: &str,
@@ -996,6 +999,7 @@ fn emit_state_flat_args(
     for usage in &state.usages {
         let resource_id_field = format_ident!("{}_resource_id", usage.field_name);
         let alias = format_ident!("__{}Capacity", to_pascal_case(&usage.field_name));
+        let capacity_attrs = resource_operating_attrs(model, usage);
 
         // Resource type paths may be bare names (e.g., "Queue") for types in the
         // same crate, or qualified (e.g., "quent_stdlib::processor::Processor").
@@ -1020,6 +1024,16 @@ fn emit_state_flat_args(
             type #alias = <#resource_ty as #q::Resource>::CapacityValue;
         });
 
+        let capacity_expr = if capacity_attrs.is_empty() {
+            quote! { #alias::default() }
+        } else {
+            let values = capacity_attrs.iter().map(|attr| {
+                let field = format_ident!("{}_{}", usage.field_name, attr.name);
+                quote! { data.#field }
+            });
+            quote! { #alias::from((#(#values,)*)) }
+        };
+
         args.push(quote! {
             {
                 let uuid = #q::uuid::Uuid::from(data.#resource_id_field);
@@ -1028,7 +1042,7 @@ fn emit_state_flat_args(
                 } else {
                     Some(#q::Usage {
                         resource_id: #q::Ref::new(uuid),
-                        capacity: #alias::default(),
+                        capacity: #capacity_expr,
                     })
                 }
             }
@@ -1039,7 +1053,12 @@ fn emit_state_flat_args(
 }
 
 /// Generate a CXX bridge for an FSM.
-fn emit_fsm_bridge(fsm: &FsmDef, model_name: &str, options: &CxxOptions) -> GeneratedFile {
+fn emit_fsm_bridge(
+    model: &ModelBuilder,
+    fsm: &FsmDef,
+    model_name: &str,
+    options: &CxxOptions,
+) -> GeneratedFile {
     let fsm_name = &fsm.name;
     let safe_name = cxx_safe_name(fsm_name);
     let ns = format!("{}::{}", options.namespace, safe_name);
@@ -1093,6 +1112,21 @@ fn emit_fsm_bridge(fsm: &FsmDef, model_name: &str, options: &CxxOptions) -> Gene
                 "        pub {}_resource_id: UUID,\n",
                 usage.field_name
             ));
+
+            for attr in resource_operating_attrs(model, usage) {
+                let cxx_type = value_type_to_cxx(&attr.value_type, attr.optional)
+                          .unwrap_or_else(|| {
+                              panic!(
+                                  "usage capacity `{}` for usage `{}` on state `{}` has type not representable in CXX",
+                                  attr.name, usage.field_name, state.name
+                              )
+                          });
+
+                fields_str.push_str(&format!(
+                    "        pub {}_{}: {},\n",
+                    usage.field_name, attr.name, cxx_type
+                ));
+            }
         }
         shared_structs_str.push_str(&format!(
             "    #[derive(Debug)]\n    pub struct {state_pascal} {{\n{fields_str}    }}\n\n"
@@ -1163,7 +1197,7 @@ fn emit_fsm_bridge(fsm: &FsmDef, model_name: &str, options: &CxxOptions) -> Gene
                     }
                 }
             } else {
-                let (stmts, args) = emit_state_flat_args(state, &q, &remapped, options);
+                let (stmts, args) = emit_state_flat_args(model, state, &q, &remapped, options);
                 quote! {
                     pub fn #method_name(&mut self, data: ffi::#state_pascal_ident) {
                         #stmts
@@ -1176,7 +1210,7 @@ fn emit_fsm_bridge(fsm: &FsmDef, model_name: &str, options: &CxxOptions) -> Gene
 
     let observer_name = format_ident!("{}Observer", pascal_name);
     let factory_fn = if has_entry_data {
-        let (stmts, args) = emit_state_flat_args(entry_state, &q, &remapped, options);
+        let (stmts, args) = emit_state_flat_args(model, entry_state, &q, &remapped, options);
         quote! {
             pub fn create(ctx: &super::context::Context, data: ffi::#entry_pascal) -> Box<#handle_name> {
                 #stmts

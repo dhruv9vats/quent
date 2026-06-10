@@ -41,6 +41,33 @@ mod fsm_struct_attrs_fixture {
     }
 }
 
+mod usage_capacity_fixture {
+    use quent_model::{fsm, resource, state};
+
+    resource! {
+        Queue {
+            capacity: { entries: Option<u64> },
+        }
+    }
+
+    state! {
+        Queued {
+            usages: {
+                queue: Queue,
+            },
+        }
+    }
+
+    fsm! {
+        Task {
+            states: { queued: Queued },
+            entry: queued,
+            exit_from: { queued },
+            transitions: {},
+        }
+    }
+}
+
 #[test]
 fn generate_query_engine_cxx_bridge() {
     let builder = quent_query_engine_model::QueryEngineModel::build("QueryEngine");
@@ -205,4 +232,31 @@ fn fsm_state_struct_attributes_are_converted() {
         !data_batch_file.content.contains("data.memory_space_id,"),
         "ffi::MemorySpaceId should not be passed directly to the model callback"
     );
+}
+
+#[test]
+fn cxx_fsm_usage_capacity_fields_are_generated() {
+    type TestModel =
+        quent_model::Model<(usage_capacity_fixture::Queue, usage_capacity_fixture::Task)>;
+
+    let builder = TestModel::build("UsageCapacity");
+
+    let options = CxxOptions {
+        instrumentation_crate: "test_instrumentation".into(),
+        ..Default::default()
+    };
+
+    let files = emit_cxx(&builder, &options);
+    let task_file = files.iter().find(|f| f.name == "task.rs").unwrap();
+
+    assert!(task_file.content.contains("pub queue_resource_id: UUID,"));
+    assert!(
+        task_file
+            .content
+            .contains("pub queue_capacity_entries: u64,")
+    );
+    assert!(task_file.content.contains("__QueueCapacity::from("));
+    assert!(task_file.content.contains("data.queue_capacity_entries"));
+
+    syn::parse_file(&task_file.content).unwrap();
 }
