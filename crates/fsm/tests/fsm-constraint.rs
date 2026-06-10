@@ -1,36 +1,16 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use quent_constraints::{Constraint as _, Error as ValidatorError, Validator};
+use quent_constraints::Constraint as _;
 use quent_fsm::{Fsm, FsmConstraint, FsmError};
 use quent_schema::{
-    Schema,
-    annotations::Annotations,
-    constraint::Constraint,
-    entity::Entity,
-    event::{Cardinality, Event},
-    identifier::Identifier,
+    Cardinality, Entity, Event, Schema,
+    builder::{AnnotationsBuilder, EntityBuilder},
+    test_utils::{entity as bare_entity, event_with, ident, schema},
 };
 
-fn ident(s: &str) -> Identifier {
-    Identifier::try_new(s).unwrap()
-}
-
 fn event(name: &str, cardinality: Cardinality) -> Event {
-    Event {
-        name: ident(name),
-        cardinality,
-        payload: vec![],
-        annotations: Annotations::default(),
-    }
-}
-
-fn bare_entity(name: &str, events: Vec<Event>) -> Entity {
-    Entity {
-        name: ident(name),
-        events,
-        annotations: Annotations::default(),
-    }
+    event_with(name, cardinality, vec![])
 }
 
 // Build the constraint's JSON directly so we can build it in an invalid way.
@@ -48,49 +28,29 @@ fn fsm(initial: &str, transitions: &[(&str, &str)], exit: &[&str]) -> String {
     .to_string()
 }
 
-fn fsm_constraint(data: &str) -> Constraint {
-    Constraint {
-        name: FsmConstraint::NAME.to_string(),
-        data: Some(data.to_string()),
-    }
-}
-
 fn entity_with(name: &str, events: Vec<Event>, data: &str) -> Entity {
-    Entity {
-        name: ident(name),
-        events,
-        annotations: Annotations {
-            constraints: vec![fsm_constraint(data)],
-            ..Default::default()
-        },
-    }
+    EntityBuilder::new(ident(name))
+        .events(events)
+        .unwrap()
+        .annotations(
+            AnnotationsBuilder::new()
+                .constraint(FsmConstraint::NAME, Some(data.to_string()))
+                .unwrap()
+                .build(),
+        )
+        .build()
 }
 
 fn schema_with(entity: Entity) -> Schema {
-    Schema {
-        name: ident("S"),
-        entities: vec![entity],
-        records: vec![],
-        annotations: Annotations::default(),
-    }
+    schema("S", vec![entity], vec![])
 }
 
 fn validate(schema: &Schema) -> Vec<FsmError> {
-    match Validator::default()
-        .try_with(FsmConstraint)
-        .unwrap()
-        .validate(schema)
-    {
+    let report = quent_constraints::validate::<(FsmConstraint,)>(schema);
+    match report.results.0 {
         Ok(()) => Vec::new(),
-        Err(ValidatorError::Invalid { failures, .. }) => {
-            // These tests always register the constraint, so `failures` is non-empty.
-            let (_, source) = failures.into_iter().next().unwrap();
-            match *source.downcast::<FsmError>().unwrap() {
-                FsmError::Multiple(errors) => errors,
-                single => vec![single],
-            }
-        }
-        Err(_) => unreachable!(),
+        Err(FsmError::Multiple(errors)) => errors,
+        Err(single) => vec![single],
     }
 }
 
@@ -121,17 +81,16 @@ fn single_state_fsm_passes() {
 
 #[test]
 fn missing_data_is_rejected() {
-    let entity = Entity {
-        name: ident("E"),
-        events: vec![event("a", Cardinality::Once)],
-        annotations: Annotations {
-            constraints: vec![Constraint {
-                name: FsmConstraint::NAME.to_string(),
-                data: None,
-            }],
-            ..Default::default()
-        },
-    };
+    let entity = EntityBuilder::new(ident("E"))
+        .event(event("a", Cardinality::Once))
+        .unwrap()
+        .annotations(
+            AnnotationsBuilder::new()
+                .constraint(FsmConstraint::NAME, None)
+                .unwrap()
+                .build(),
+        )
+        .build();
     let errors = validate(&schema_with(entity));
     assert!(
         errors
@@ -142,17 +101,16 @@ fn missing_data_is_rejected() {
 
 #[test]
 fn invalid_json_is_rejected() {
-    let entity = Entity {
-        name: ident("E"),
-        events: vec![event("a", Cardinality::Once)],
-        annotations: Annotations {
-            constraints: vec![Constraint {
-                name: FsmConstraint::NAME.to_string(),
-                data: Some("{ trash".to_string()),
-            }],
-            ..Default::default()
-        },
-    };
+    let entity = EntityBuilder::new(ident("E"))
+        .event(event("a", Cardinality::Once))
+        .unwrap()
+        .annotations(
+            AnnotationsBuilder::new()
+                .constraint(FsmConstraint::NAME, Some("{ trash".to_string()))
+                .unwrap()
+                .build(),
+        )
+        .build();
     let errors = validate(&schema_with(entity));
     assert!(
         errors

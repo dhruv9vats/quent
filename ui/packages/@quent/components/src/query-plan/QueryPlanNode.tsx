@@ -45,7 +45,7 @@ export interface QueryPlanNodeData extends Record<string, unknown> {
 }
 
 const nodeVariants = cva(
-  'px-4 py-2 rounded-md border-1 min-w-[180px] max-w-[250px] transition cursor-pointer text-foreground z-10 nodrag nopan',
+  'w-full px-4 py-2 rounded-md border-1 transition cursor-pointer text-foreground z-10 nodrag nopan',
   {
     variants: {
       selected: {

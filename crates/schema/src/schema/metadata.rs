@@ -8,11 +8,27 @@
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Metadata {
     /// The name of the metadata entry.
-    pub name: String,
+    name: String,
     /// The opaque metadata value.
     ///
     /// The format for this data is unrestricted, other than that it must form a
     /// valid UTF-8 string. It is encouraged to serialize Metadata data in a
     /// human-readable fashion for easier debugging.
-    pub data: Option<String>,
+    data: Option<String>,
+}
+
+impl Metadata {
+    pub(crate) fn from_parts(name: String, data: Option<String>) -> Self {
+        Self { name, data }
+    }
+
+    /// The name of the metadata entry.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The opaque metadata value, if any.
+    pub fn data(&self) -> Option<&str> {
+        self.data.as_deref()
+    }
 }

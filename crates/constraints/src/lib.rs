@@ -3,9 +3,12 @@
 
 //! # Constraint trait and validation for [`Schema`]s.
 
-use std::collections::{BTreeSet, HashMap, hash_map::Entry};
+pub mod utils;
 
-use quent_schema::{Schema, constraint::Constraint as SchemaConstraint, data_type::DataType};
+mod unregistered_constraints;
+mod unresolved_refs;
+
+use quent_schema::{Schema, visitor::Visitor};
 
 /// A trait for types that implement a "constraint" of an application event
 /// model.
@@ -21,8 +24,8 @@ use quent_schema::{Schema, constraint::Constraint as SchemaConstraint, data_type
 /// Constraints are leveraged for a wide variety of purposes. For more details,
 /// see [`quent_schema`].
 ///
-/// The canonical validation flow is orchestrated by the [`Validator`].
-pub trait Constraint {
+/// The canonical validation flow is orchestrated by [`validate`].
+pub trait Constraint: Visitor + Default {
     /// A unique name for this constraint.
     ///
     /// While no restrictions are imposed on constraint names (other than that
@@ -32,145 +35,99 @@ pub trait Constraint {
     /// between dependencies, and provides a means of easily detecting breaking
     /// changes to the constraint's own schema.
     const NAME: &'static str;
-
-    /// Validate this constraint against `schema`.
-    fn validate(&self, schema: &Schema) -> Result<(), Box<dyn std::error::Error>>;
 }
 
-/// The error type produced by this crate.
-#[derive(Debug)]
-pub enum Error {
-    /// A [`Constraint`] was registered under a name already in use.
-    DuplicateConstraint(&'static str),
-    /// Validation failed.
-    Invalid {
-        /// Constraint names used by the schema with no registered validator.
-        unregistered: BTreeSet<String>,
-        /// Failures reported by registered constraints.
-        failures: Vec<(&'static str, Box<dyn std::error::Error>)>,
-    },
+/// The outcome of [`validate`].
+pub struct Report<R> {
+    /// Constraint names referenced by the schema that no validated constraint
+    /// handles.
+    pub unregistered_constraints: Vec<String>,
+    /// Invalid references
+    pub invalid_references: Vec<String>,
+    /// Each constraint's own result, in tuple order matching the validated
+    /// constraints.
+    pub results: R,
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::DuplicateConstraint(name) => {
-                write!(f, "duplicate registration of constraint: \"{name}\"")
-            }
-            Error::Invalid {
-                unregistered,
-                failures,
-            } => {
-                writeln!(f, "schema failed to validate:")?;
-                for name in unregistered {
-                    writeln!(f, "unregistered constraint: \"{name}\"")?;
-                }
-                for (name, source) in failures {
-                    writeln!(f, "constraint \"{name}\": {source}")?;
-                }
-                Ok(())
-            }
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
-type ConstraintFn = Box<dyn Fn(&Schema) -> Result<(), Box<dyn std::error::Error>>>;
-
-/// Validates registered [`Constraint`]s.
+/// Validates (a tuple of) [`Constraint`]s against `schema`.
 ///
-/// Validation will fail when:
-/// - a constraint used by the schema isn't registered by the validator, or
-/// - the rule of a registered constraint is unmet
+/// The returned validation [`Report`] always includes:
+/// - the result of an internal consistency check of the schema (i.e. internal
+///   references properly resolve)
+/// - a list of unregistered constraints
 ///
-/// # Example: validate in a `build.rs`
+/// Results from additional constraints are gathered in [`Report::results`].
 ///
-/// ```ignore
-/// let validator = Validator::default()
-///     .try_with(MyConstraint)?; // register a constraint implemented elsewhere
-///
-/// if let Err(error) = validator.validate(&schema) {
-///     panic!("{error}");
-/// }
 /// ```
-#[derive(Default)]
-pub struct Validator {
-    constraints: HashMap<&'static str, ConstraintFn>,
-}
-
-impl Validator {
-    /// Register a [`Constraint`] to be validated.
-    pub fn try_with<C: Constraint + 'static>(mut self, constraint: C) -> Result<Self, Error> {
-        match self.constraints.entry(C::NAME) {
-            Entry::Occupied(_) => Err(Error::DuplicateConstraint(C::NAME)),
-            Entry::Vacant(entry) => {
-                entry.insert(Box::new(move |schema: &Schema| constraint.validate(schema)));
-                Ok(self)
-            }
-        }
-    }
-
-    /// Run validation of all registered constraints against `schema`.
-    pub fn validate(&self, schema: &Schema) -> Result<(), Error> {
-        // First, walk the entire schema to figure out if it uses any
-        // unregistered constraints.
-        let mut unregistered = BTreeSet::new();
-        let mut check = |constraints: &[SchemaConstraint]| {
-            for constraint in constraints {
-                if !self.constraints.contains_key(constraint.name.as_str()) {
-                    unregistered.insert(constraint.name.clone());
-                }
-            }
-        };
-        check(&schema.annotations.constraints);
-        for entity in &schema.entities {
-            check(&entity.annotations.constraints);
-            for event in &entity.events {
-                check(&event.annotations.constraints);
-                for field in &event.payload {
-                    check(&field.annotations.constraints);
-                    check_entity_refs(&field.ty, &mut check);
-                }
-            }
-        }
-        for record in &schema.records {
-            check(&record.annotations.constraints);
-            for field in &record.fields {
-                check(&field.annotations.constraints);
-                check_entity_refs(&field.ty, &mut check);
-            }
-        }
-
-        // Second, validate
-        let mut failures = Vec::new();
-        for (name, validate) in &self.constraints {
-            if let Err(source) = validate(schema) {
-                failures.push((*name, source));
-            }
-        }
-
-        if unregistered.is_empty() && failures.is_empty() {
-            Ok(())
-        } else {
-            Err(Error::Invalid {
-                unregistered,
-                failures,
-            })
-        }
+/// use quent_constraints::validate;
+/// use quent_schema::{Identifier, Schema, builder::SchemaBuilder};
+/// # use quent_constraints::Constraint;
+/// # use quent_schema::visitor::{Cursor, Visitor};
+/// #
+/// # #[derive(Default)]
+/// # struct DocConstraint;
+/// # impl Visitor for DocConstraint {
+/// #     type Output = Result<(), String>;
+/// #     fn visit(&mut self, _cursor: &Cursor) {}
+/// #     fn finish(self) -> Self::Output {
+/// #         Ok(())
+/// #     }
+/// # }
+/// # impl Constraint for DocConstraint {
+/// #     const NAME: &'static str = "quent.docs.constraint.v1";
+/// # }
+/// # type ConstraintA = DocConstraint;
+/// # type ConstraintB = DocConstraint;
+/// #
+/// # let schema: Schema =
+/// #     SchemaBuilder::new(Identifier::try_new("MySchema").unwrap()).build();
+///
+/// let report = validate::<(ConstraintA, ConstraintB)>(&schema);
+/// let (result_a, result_b) = report.results;
+/// assert!(result_a.is_ok());
+/// assert!(result_b.is_ok());
+/// assert!(report.unregistered_constraints.is_empty());
+/// assert!(report.invalid_references.is_empty());
+/// ```
+pub fn validate<C: Constraints>(schema: &Schema) -> Report<C::Output> {
+    let (invalid_references, unregistered_constraints, results) = schema.walk((
+        unresolved_refs::UnresolvedReferences::default(),
+        unregistered_constraints::UnregisteredConstraints::new(C::NAMES),
+        C::default(),
+    ));
+    Report {
+        unregistered_constraints: unregistered_constraints.into_iter().collect(),
+        invalid_references,
+        results,
     }
 }
 
-fn check_entity_refs(ty: &DataType, check: &mut impl FnMut(&[SchemaConstraint])) {
-    match ty {
-        DataType::Option(inner) | DataType::List(inner) => check_entity_refs(inner, check),
-        DataType::EntityRef { data, annotations } => {
-            check(&annotations.constraints);
-            if let Some(inner) = data {
-                check_entity_refs(inner, check);
-            }
-        }
-        // this doesn't need to go into records as this is walked from the top-level
-        _ => {}
-    }
+/// A tuple of [`Constraint`]s that can be validated together in one walk.
+pub trait Constraints: Visitor + Default {
+    /// The [`Constraint::NAME`] of every constraint in the tuple.
+    const NAMES: &'static [&'static str];
 }
+
+// Enables validate::<()>(schema)
+impl Constraints for () {
+    const NAMES: &'static [&'static str] = &[];
+}
+macro_rules! constraints_impls {
+    ($($T:ident),+) => {
+        impl<$($T: Constraint),+> Constraints for ($($T,)+) {
+            const NAMES: &'static [&'static str] = &[$($T::NAME),+];
+        }
+    };
+}
+constraints_impls!(A);
+constraints_impls!(A, B);
+constraints_impls!(A, B, C);
+constraints_impls!(A, B, C, D);
+constraints_impls!(A, B, C, D, E);
+constraints_impls!(A, B, C, D, E, F);
+constraints_impls!(A, B, C, D, E, F, G);
+constraints_impls!(A, B, C, D, E, F, G, H);
+constraints_impls!(A, B, C, D, E, F, G, H, I);
+constraints_impls!(A, B, C, D, E, F, G, H, I, J);
+constraints_impls!(A, B, C, D, E, F, G, H, I, J, K);
+constraints_impls!(A, B, C, D, E, F, G, H, I, J, K, L);

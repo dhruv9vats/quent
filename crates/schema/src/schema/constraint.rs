@@ -15,11 +15,27 @@
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Constraint {
     /// The name of the constraint.
-    pub name: String,
+    name: String,
     /// Constraint-specific opaque data.
     ///
     /// The format for this data is unrestricted, other than that it must form a
     /// valid UTF-8 string. It is encouraged to serialize Constraint data in a
     /// human-readable fashion for easier debugging.
-    pub data: Option<String>,
+    data: Option<String>,
+}
+
+impl Constraint {
+    pub(crate) fn from_parts(name: String, data: Option<String>) -> Self {
+        Self { name, data }
+    }
+
+    /// The name of the constraint.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The constraint-specific opaque data, if any.
+    pub fn data(&self) -> Option<&str> {
+        self.data.as_deref()
+    }
 }

@@ -3,6 +3,8 @@
 
 use std::ops::Deref;
 
+use thiserror::Error;
+
 /// An identifier adhering to the grammar `[A-Za-z][A-Za-z0-9_]*`
 ///
 /// This grammar is chosen such that a minimal amount of friction is expected
@@ -14,35 +16,15 @@ use std::ops::Deref;
 pub struct Identifier(String);
 
 /// Reason a string failed to parse as an [`Identifier`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum IdentifierError {
-    /// The string is empty.
+    #[error("identifier must not be empty")]
     Empty,
-    /// The first character is an ASCII letter `[A-Za-z]`.
+    #[error("identifier must start with an ASCII letter in [A-Za-z], found {0:?}")]
     InvalidStart(char),
-    /// A character `ch` at byte offset `index` is not in `[A-Za-z0-9_]`.
+    #[error("identifier character {ch:?} at byte offset {index} is not [A-Za-z0-9_]")]
     InvalidChar { ch: char, index: usize },
 }
-
-impl std::fmt::Display for IdentifierError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Empty => f.write_str("identifier must not be empty"),
-            Self::InvalidStart(ch) => {
-                write!(
-                    f,
-                    "identifier must start with an ASCII letter, found {ch:?}"
-                )
-            }
-            Self::InvalidChar { ch, index } => write!(
-                f,
-                "identifier character {ch:?} at byte offset {index} is not [A-Za-z0-9_]"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for IdentifierError {}
 
 impl Identifier {
     /// Validates `s` against the grammar `[A-Za-z][A-Za-z0-9_]*` and wraps it.

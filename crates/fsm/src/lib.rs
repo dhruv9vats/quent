@@ -10,8 +10,11 @@ use petgraph::{
     graphmap::DiGraphMap,
     visit::{Bfs, Reversed, Walker},
 };
-use quent_constraints::Constraint;
-use quent_schema::{Schema, entity::Entity, event::Cardinality, identifier::Identifier};
+use quent_constraints::{Constraint, utils::bullet_list};
+use quent_schema::{
+    Cardinality, Entity, Identifier,
+    visitor::{Cursor, Element, Visitor},
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -130,69 +133,72 @@ impl Fsm {
 /// 6. A state on a cycle has [`Cardinality::Multi`], otherwise
 ///    [`Cardinality::Once`].
 /// 7. At least one exit transition exists (enforced by [`ExitStates`]).
-pub struct FsmConstraint;
+#[derive(Default)]
+pub struct FsmConstraint {
+    errors: Vec<FsmError>,
+}
 
-impl Constraint for FsmConstraint {
-    const NAME: &'static str = "quent.fsm.v1";
+impl Visitor for FsmConstraint {
+    type Output = Result<(), FsmError>;
 
-    fn validate(&self, schema: &Schema) -> Result<(), Box<dyn std::error::Error>> {
-        let mut errors = Vec::new();
-        for entity in &schema.entities {
-            let Some(constraint) = entity
-                .annotations
-                .constraints
-                .iter()
-                .find(|c| c.name == Self::NAME)
-            else {
-                continue;
-            };
-            let raw = match constraint.data.as_deref() {
-                Some(s) => s,
-                None => {
-                    errors.push(FsmError::InvalidData {
-                        entity: entity.name.clone(),
-                        message: "constraint data is missing".to_string(),
-                    });
-                    continue;
-                }
-            };
-            let fsm = match serde_json::from_str::<Fsm>(raw) {
-                Ok(f) => f,
-                Err(e) => {
-                    errors.push(FsmError::InvalidData {
-                        entity: entity.name.clone(),
-                        message: format!("failed to decode fsm: {e}"),
-                    });
-                    continue;
-                }
-            };
-            check_entity(entity, &fsm, &mut errors);
-        }
+    fn visit(&mut self, cursor: &Cursor) {
+        let Element::Entity(entity) = cursor.current() else {
+            return;
+        };
+        let Some(constraint) = entity.annotations().constraint(FsmConstraint::NAME) else {
+            return;
+        };
+        let raw = match constraint.data() {
+            Some(s) => s,
+            None => {
+                self.errors.push(FsmError::InvalidData {
+                    entity: entity.name().clone(),
+                    message: "constraint data is missing".to_string(),
+                });
+                return;
+            }
+        };
+        let fsm = match serde_json::from_str::<Fsm>(raw) {
+            Ok(f) => f,
+            Err(e) => {
+                self.errors.push(FsmError::InvalidData {
+                    entity: entity.name().clone(),
+                    message: format!("failed to decode fsm: {e}"),
+                });
+                return;
+            }
+        };
+        check_entity(entity, &fsm, &mut self.errors);
+    }
 
-        match errors.len() {
+    fn finish(self) -> Self::Output {
+        match self.errors.len() {
             0 => Ok(()),
-            1 => Err(errors.pop().unwrap().into()),
-            _ => Err(FsmError::Multiple(errors).into()),
+            1 => Err(self.errors.into_iter().next().unwrap()),
+            _ => Err(FsmError::Multiple(self.errors)),
         }
     }
 }
 
+impl Constraint for FsmConstraint {
+    const NAME: &'static str = "quent.fsm.v1";
+}
+
 pub(crate) fn check_entity(entity: &Entity, fsm: &Fsm, errors: &mut Vec<FsmError>) {
     // Requirement 1: no event may be named "exit".
-    for event in &entity.events {
-        if event.name.to_ascii_lowercase() == "exit" {
+    for event in entity.events() {
+        if event.name().to_ascii_lowercase() == "exit" {
             errors.push(FsmError::ReservedStateName {
-                entity: entity.name.clone(),
+                entity: entity.name().clone(),
                 name: "exit",
             });
         }
     }
 
-    let event_names: HashSet<&Identifier> = entity.events.iter().map(|e| &e.name).collect();
+    let event_names: HashSet<&Identifier> = entity.events().map(|e| e.name()).collect();
     let cardinality_by_event: BTreeMap<&Identifier, Cardinality> = entity
-        .events
-        .iter()
-        .map(|e| (&e.name, e.cardinality))
+        .events()
+        .map(|e| (e.name(), e.cardinality()))
         .collect();
 
     // Gather every state named
@@ -204,7 +210,7 @@ pub(crate) fn check_entity(entity: &Entity, fsm: &Fsm, errors: &mut Vec<FsmError
     // Requirement 2: every state name corresponds to an entity event name.
     for &state in states.difference(&event_names) {
         errors.push(FsmError::UnknownState {
-            entity: entity.name.clone(),
+            entity: entity.name().clone(),
             state: state.clone(),
         });
     }
@@ -212,7 +218,7 @@ pub(crate) fn check_entity(entity: &Entity, fsm: &Fsm, errors: &mut Vec<FsmError
     // Requirement 3: every entity event appears as a state.
     for &event in event_names.difference(&states) {
         errors.push(FsmError::UncoveredEvent {
-            entity: entity.name.clone(),
+            entity: entity.name().clone(),
             event: event.clone(),
         });
     }
@@ -237,7 +243,7 @@ pub(crate) fn check_entity(entity: &Entity, fsm: &Fsm, errors: &mut Vec<FsmError
     for &name in &states {
         if !reachable_from_init.contains(&GraphNode::Named(name)) {
             errors.push(FsmError::UnreachableFromInit {
-                entity: entity.name.clone(),
+                entity: entity.name().clone(),
                 state: name.clone(),
             });
         }
@@ -250,7 +256,7 @@ pub(crate) fn check_entity(entity: &Entity, fsm: &Fsm, errors: &mut Vec<FsmError
     for &name in &states {
         if !reaches_exit.contains(&GraphNode::Named(name)) {
             errors.push(FsmError::CannotReachExit {
-                entity: entity.name.clone(),
+                entity: entity.name().clone(),
                 state: name.clone(),
             });
         }
@@ -269,7 +275,7 @@ pub(crate) fn check_entity(entity: &Entity, fsm: &Fsm, errors: &mut Vec<FsmError
         };
         if *actual != expected_cardinality {
             errors.push(FsmError::CardinalityMismatch {
-                entity: entity.name.clone(),
+                entity: entity.name().clone(),
                 state: name.clone(),
                 expected: expected_cardinality,
                 found: *actual,
@@ -347,14 +353,6 @@ pub enum FsmError {
         expected: Cardinality,
         found: Cardinality,
     },
-    #[error("multiple fsm violations:\n{}", join_errors(.0))]
+    #[error("multiple fsm violations:\n{}", bullet_list(.0))]
     Multiple(Vec<FsmError>),
-}
-
-fn join_errors(errors: &[FsmError]) -> String {
-    errors
-        .iter()
-        .map(|e| format!("  - {e}"))
-        .collect::<Vec<_>>()
-        .join("\n")
 }
