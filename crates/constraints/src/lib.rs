@@ -5,6 +5,7 @@
 
 pub mod utils;
 
+mod recursive_record;
 mod unregistered_constraints;
 mod unresolved_refs;
 
@@ -44,6 +45,8 @@ pub struct Report<R> {
     pub unregistered_constraints: Vec<String>,
     /// Invalid references
     pub invalid_references: Vec<String>,
+    /// Records that are recursive
+    pub recursive_records: Vec<String>,
     /// Each constraint's own result, in tuple order matching the validated
     /// constraints.
     pub results: R,
@@ -88,16 +91,19 @@ pub struct Report<R> {
 /// assert!(result_b.is_ok());
 /// assert!(report.unregistered_constraints.is_empty());
 /// assert!(report.invalid_references.is_empty());
+/// assert!(report.recursive_records.is_empty());
 /// ```
 pub fn validate<C: Constraints>(schema: &Schema) -> Report<C::Output> {
-    let (invalid_references, unregistered_constraints, results) = schema.walk((
+    let (invalid_references, unregistered_constraints, recursive_records, results) = schema.walk((
         unresolved_refs::UnresolvedReferences::default(),
         unregistered_constraints::UnregisteredConstraints::new(C::NAMES),
+        recursive_record::RecursiveRecords::default(),
         C::default(),
     ));
     Report {
         unregistered_constraints: unregistered_constraints.into_iter().collect(),
         invalid_references,
+        recursive_records,
         results,
     }
 }

@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use quent_schema::visitor::{Cursor, Element, Visitor};
+use rustc_hash::FxHashSet;
 
 /// Utility visitor to collect any unregistered constraint names.
 pub(crate) struct UnregisteredConstraints {
-    registered: HashSet<&'static str>,
+    registered: FxHashSet<&'static str>,
     unregistered: BTreeSet<String>,
 }
 
