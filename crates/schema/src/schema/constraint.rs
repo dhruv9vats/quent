@@ -13,6 +13,7 @@
 /// [`crate::metadata::Metadata`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Constraint {
     /// The name of the constraint.
     name: String,

@@ -11,12 +11,15 @@ use crate::schema::{Map, constraint::Constraint, metadata::Metadata};
 /// opaque [`Metadata`].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Annotations {
     /// Potential documentation that can e.g. be added in code generation.
     docs: Option<String>,
     /// Opaque constraints that must be validated against the schema.
+    #[cfg_attr(feature = "ts", ts(as = "indexmap::IndexMap<String, Constraint>"))]
     constraints: Map<String, Constraint>,
     /// Opaque metadata passed through the schema.
+    #[cfg_attr(feature = "ts", ts(as = "indexmap::IndexMap<String, Metadata>"))]
     metadata: Map<String, Metadata>,
 }
 

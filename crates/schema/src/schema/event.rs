@@ -5,6 +5,7 @@ use crate::schema::{Map, annotations::Annotations, field::Field, identifier::Ide
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum Cardinality {
     /// The event can be emitted zero or one time.
     Once,
@@ -14,12 +15,14 @@ pub enum Cardinality {
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Event {
     /// The name of the event.
     name: Identifier,
     /// The [`Cardinality`] of the event.
     cardinality: Cardinality,
     /// The payload fields of the event.
+    #[cfg_attr(feature = "ts", ts(as = "indexmap::IndexMap<Identifier, Field>"))]
     payload: Map<Identifier, Field>,
     /// Annotations of this event.
     annotations: Annotations,
