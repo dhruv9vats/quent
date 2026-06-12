@@ -2207,6 +2207,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "quent-ref-tree"
+version = "0.1.0"
+dependencies = [
+ "petgraph",
+ "quent-constraints",
+ "quent-ref-target",
+ "quent-schema",
+ "rustc-hash",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "quent-schema"
 version = "0.1.0"
 dependencies = [

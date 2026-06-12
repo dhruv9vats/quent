@@ -52,6 +52,7 @@ members = [
     "crates/constraints",
     "crates/schema",
     "crates/ref-target",
+    "crates/ref-tree",
     "crates/fsm",
 ]
 

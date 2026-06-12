@@ -43,6 +43,11 @@ impl Annotations {
         self.constraints.get(name)
     }
 
+    /// Return true if the constraint declared under `name` is set.
+    pub fn has_constraint(&self, name: &str) -> bool {
+        self.constraint(name).is_some()
+    }
+
     /// The declared constraints, in declaration order.
     pub fn constraints(&self) -> impl Iterator<Item = &Constraint> + '_ {
         self.constraints.values()

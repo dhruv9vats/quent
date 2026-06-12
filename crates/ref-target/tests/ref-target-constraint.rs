@@ -2,18 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use quent_constraints::Constraint as _;
-use quent_ref_target::{RefTarget, RefTargetConstraint, RefTargetError};
+use quent_ref_target::{RefTargetConstraint, RefTargetError};
 use quent_schema::{
     DataType, Entity, Schema,
     builder::AnnotationsBuilder,
     test_utils::{entity, event, field, ident, schema},
 };
 
+// RefTarget is a transparent newtype over Identifier, so the wire format is just
+// the bare entity name.
 fn target_data(target: &str) -> String {
-    serde_json::to_string(&RefTarget {
-        target: ident(target),
-    })
-    .unwrap()
+    serde_json::to_string(&ident(target)).unwrap()
 }
 
 fn ref_with(data: Option<String>) -> DataType {
