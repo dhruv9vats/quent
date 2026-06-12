@@ -2,9 +2,11 @@
 
 A front end for query profiling instrumentation
 
+![Quent overview demo](./docs/screenshots/demo.gif)
+
 ## Tech Stack
 
-- **React 18** - UI library
+- **React** - UI library
 - **TypeScript** - Type safety
 - **Vite** - Build tool and dev server
 - **TanStack Router** - Type-safe routing
@@ -20,11 +22,12 @@ A front end for query profiling instrumentation
 
 ### Prerequisites
 
-- **Node.js 24.11.0** (enforced via `.nvmrc` and `.node-version`)
+- **Node.js 24.11.0** (enforced via `.nvmrc`, `.node-version`, and Volta)
   - Using nvm: `nvm use` or `nvm install`
   - Using volta: Automatically switches to correct version
   - Using asdf/nodenv: Uses `.node-version` file
-- **pnpm 9.0.0+** (required) - Install with `npm install -g pnpm` or see
+- **pnpm 11.5.3** (pinned via `packageManager` and Volta; `>=11.5.3` required)
+  - Install with `npm install -g pnpm@11.5.3` or see
   [pnpm installation](https://pnpm.io/installation)
 
 ### Installation
@@ -97,29 +100,6 @@ stores generated event data in `ui/.e2e-data/`.
 In CI only, Playwright writes an HTML report and screenshots failures; the
 GitHub UI workflow uploads those files when the E2E job fails.
 
-## Project Structure
-
-```text
-ui/
-├── src/
-│   ├── components/        # Reusable components
-│   │   ├── ui/           # shadcn/ui components
-│   ├── lib/              # Utility libraries
-│   │   └── utils.ts     # Tailwind class merging utility
-│   ├── pages/            # Page components
-│   ├── routes/           # TanStack Router routes
-│   ├── services/         # API services
-│   ├── main.tsx         # Application entry point
-│   └── index.css        # Global styles with Tailwind directives
-├── index.html           # HTML entry point
-├── vite.config.ts       # Vite configuration
-├── tsconfig.json        # TypeScript configuration
-├── tailwind.config.js   # Tailwind CSS configuration
-├── postcss.config.js    # PostCSS configuration
-├── components.json      # shadcn/ui configuration
-└── package.json         # Project dependencies
-```
-
 ## API Integration
 
 The application includes stub API functions in `src/services/api.ts`. These
@@ -151,14 +131,6 @@ the theme by editing the CSS variables in `src/index.css`:
 
 You can also customize Tailwind's configuration in `tailwind.config.js` to
 extend the default theme with custom colors, fonts, spacing, etc.
-
-### Adding New Charts
-
-1. Create a new component in `src/components/`
-2. Wrap it in a shadcn `Card` component for consistent styling
-3. Define the ECharts options with TypeScript
-4. Use the `ReactECharts` component to render
-5. Import and use in your dashboard pages
 
 ### Adding shadcn/ui Components
 
@@ -216,5 +188,5 @@ To leave them on for every dev session on your machine, create a
 VITE_DEBUG=1
 ```
 
-Then a plain `pnpm dev` will pick it up. Restart the dev server after
-changing env vars — Vite does not hot-reload `import.meta.env` changes.
+Then a plain `pnpm dev` will pick it up. Restart the dev server after changing
+env vars; Vite does not hot-reload `import.meta.env` changes.
