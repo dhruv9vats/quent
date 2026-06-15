@@ -54,6 +54,8 @@ members = [
     "crates/ref-target",
     "crates/ref-tree",
     "crates/fsm",
+    "crates/instrumentation-build",
+    "crates/instrumentation-build/example",
 ]
 
 # default-members excludes any crate that activates `quent-time/__test-clock-override`.

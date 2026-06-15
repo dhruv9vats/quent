@@ -199,7 +199,14 @@ fn consistency_is_always_checked_in_the_same_walk() {
     // The constraint passed, but the schema is internally inconsistent: a
     // reference to a record that does not exist.
     assert!(report.results.0.is_ok());
-    assert_eq!(report.invalid_references.len(), 1);
+    assert_eq!(
+        report
+            .base_constraints
+            .unwrap_err()
+            .invalid_references
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -208,8 +215,15 @@ fn validates_consistency_with_no_constraints() {
     // No constraints, just the always-on consistency checks.
     let report = validate::<()>(&schema);
     assert_eq!(report.results, ());
-    assert_eq!(report.invalid_references.len(), 1);
+    assert_eq!(
+        report
+            .base_constraints
+            .unwrap_err()
+            .invalid_references
+            .len(),
+        1
+    );
 
     let clean = validate::<()>(&empty_schema());
-    assert!(clean.invalid_references.is_empty());
+    assert!(clean.base_constraints.is_ok());
 }
