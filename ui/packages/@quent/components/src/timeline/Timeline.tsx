@@ -202,7 +202,7 @@ export function Timeline({
 
   const xAxisOptions = useMemo(
     () => ({
-      boundaryGap: false,
+      boundaryGap: [0, 0] as [number, number],
       type: 'time',
       animation: false,
       show: true,

@@ -84,7 +84,7 @@ export function TimelineRuler({ startTime, isDark, mode = 'relative' }: Timeline
         min: zoomedStartMs,
         max: zoomedEndMs,
         interval,
-        boundaryGap: false,
+        boundaryGap: [0, 0] as [number, number],
         // Re-enable ticks (theme disables them by default); prominent color + extra length.
         axisTick: {
           show: true,

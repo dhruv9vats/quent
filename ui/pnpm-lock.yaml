@@ -250,9 +250,6 @@ importers:
       echarts-for-react:
         specifier: ^3.0.6
         version: 3.0.6(echarts@6.1.0)(react@19.2.4)
-      elkjs:
-        specifier: ^0.11.1
-        version: 0.11.1
       jotai:
         specifier: ^2.0.0
         version: 2.18.0(@babel/core@7.29.0)(@babel/template@7.28.6)(@types/react@19.2.14)(react@19.2.4)

@@ -9,6 +9,9 @@ on:
       - "**/Cargo.lock"
       - "**/*.proto"
       - "pixi.toml"
+      - "pixi.lock"
+      - "ui/pnpm-lock.yaml"
+      - "ui/package.json"
       - ".github/workflows/rust.yml"
       - "deny.toml"
   pull_request:
@@ -18,6 +21,9 @@ on:
       - "**/Cargo.lock"
       - "**/*.proto"
       - "pixi.toml"
+      - "pixi.lock"
+      - "ui/pnpm-lock.yaml"
+      - "ui/package.json"
       - ".github/workflows/rust.yml"
       - "deny.toml"
 
