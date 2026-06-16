@@ -175,19 +175,10 @@ pub fn expand(input: TokenStream) -> syn::Result<TokenStream> {
          [`Self::try_new()`], then call the `*_observer()` methods to get \
          observers for each model component."
     );
-    // TODO(johanpel): `id` is required to equal the root entity's id, but
-    // nothing enforces it — the context never observes the root declaration.
-    // Enforce this through the type system (take the typed root id) in the
-    // planned instrumentation refactor instead of relying on this doc contract.
     let doc_try_new = format!(
         "Create a new {name} instrumentation context.\n\
          \n\
          # Arguments\n\
-         * `id` — the id of the root resource group entity (the `root:` component \
-         of the model). It must equal the id that entity is later declared with: \
-         the exporter keys this context's event stream by `id` and the analyzer \
-         loads a context's events by the root entity's id, so a mismatch leaves the \
-         events uncorrelated.\n\
          * `exporter` — optional exporter configuration (e.g., ndjson, msgpack). \
          Pass `None` for a no-op context that discards events."
     );
@@ -235,12 +226,16 @@ pub fn expand(input: TokenStream) -> syn::Result<TokenStream> {
                 impl #context_type {
                     #[doc = #doc_try_new]
                     pub fn try_new(
-                        id: quent_model::uuid::Uuid,
                         exporter: Option<quent_model::exporter::ExporterOptions>,
                     ) -> Result<Self, Box<dyn std::error::Error>> {
-                        let inner = quent_model::Context::try_new(id, exporter)?;
+                        let inner = quent_model::Context::try_new(exporter)?;
                         let tx = inner.events_sender();
                         Ok(Self { _inner: inner, tx })
+                    }
+
+                    /// Identity of this context, generated on construction.
+                    pub fn id(&self) -> quent_model::uuid::Uuid {
+                        self._inner.id()
                     }
 
                     #(#observer_methods)*

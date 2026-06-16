@@ -22,11 +22,12 @@
 #include <string>
 
 int main() {
-  // The root resource group uses the same ID as the context.
+  // The context generates its own id for the output subdirectory; the root
+  // resource group uses an independent id here.
   auto cluster_id = uuid::now_v7();
   {
     // Create instrumentation context — events exported to ndjson.
-    auto ctx = quent::create_context(cluster_id, "ndjson", "./events");
+    auto ctx = quent::create_context("ndjson", "./events");
 
     auto cluster_obs = quent::cluster::create_observer(*ctx);
     cluster_obs->cluster_declaration(cluster_id,
