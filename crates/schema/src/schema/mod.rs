@@ -21,13 +21,17 @@ pub mod record;
 pub(crate) type Map<K, V> = indexmap::IndexMap<K, V, rustc_hash::FxBuildHasher>;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Schema {
     /// The name of the model.
     name: Identifier,
     /// The [`Entity`]s of the model.
+    // The FxBuildHasher has no ts_rs::TS impl, hence these attributes:
+    #[cfg_attr(feature = "ts", ts(as = "indexmap::IndexMap<Identifier, Entity>"))]
     entities: Map<Identifier, Entity>,
     /// The [`Record`]s of the model.
+    #[cfg_attr(feature = "ts", ts(as = "indexmap::IndexMap<Identifier, Record>"))]
     records: Map<Identifier, Record>,
     /// Annotations of this schema.
     annotations: Annotations,

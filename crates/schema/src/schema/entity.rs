@@ -5,10 +5,12 @@ use crate::schema::{Map, annotations::Annotations, event::Event, identifier::Ide
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Entity {
     /// The name of the entity.
     name: Identifier,
     /// The events that this entity can emit.
+    #[cfg_attr(feature = "ts", ts(as = "indexmap::IndexMap<Identifier, Event>"))]
     events: Map<Identifier, Event>,
     /// Annotations of this entity.
     annotations: Annotations,

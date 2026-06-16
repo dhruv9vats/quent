@@ -5,10 +5,12 @@ use crate::schema::{Map, annotations::Annotations, field::Field, identifier::Ide
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Record {
     /// The name of the record.
     name: Identifier,
     /// The fields of the record.
+    #[cfg_attr(feature = "ts", ts(as = "indexmap::IndexMap<Identifier, Field>"))]
     fields: Map<Identifier, Field>,
     /// Annotations of this record.
     annotations: Annotations,

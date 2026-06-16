@@ -13,6 +13,7 @@ use thiserror::Error;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "String"))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Identifier(String);
 
 /// Reason a string failed to parse as an [`Identifier`].

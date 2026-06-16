@@ -49,8 +49,8 @@ const nodeVariants = cva(
   {
     variants: {
       selected: {
-        true: 'shadow-glow border-2 scale-110',
-        false: 'shadow-md',
+        true: 'border-2 scale-110',
+        false: '',
       },
     },
     defaultVariants: {
@@ -162,14 +162,17 @@ export const QueryPlanNode = memo(({ data }: { data: QueryPlanNodeData }) => {
 
   const nodeContent = (
     <div
-      className={nodeVariants({ selected: isSelected })}
+      className={cn(nodeVariants({ selected: isSelected }), {
+        'shadow-glow': isSelected || isActiveHighlight,
+        'shadow-node': !isSelected && !isActiveHighlight,
+      })}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       style={
         {
           borderColor: heatmapColor ?? activeColor,
           backgroundColor: heatmapColor ?? bgColor,
-          '--glow-color': activeColor,
+          '--glow-color': 'hsl(var(--primary))',
           ...(fieldColor && isLightColor(fieldColor) ? { color: '#111827' } : {}),
         } as React.CSSProperties
       }
@@ -209,9 +212,7 @@ export const QueryPlanNode = memo(({ data }: { data: QueryPlanNodeData }) => {
 
   return (
     <div
-      className={cn(opacityClass, 'z-10', {
-        'ring-2 ring-primary/50 rounded-md': isActiveHighlight,
-      })}
+      className={cn(opacityClass, 'z-10')}
     >
       {nodeContent}
     </div>

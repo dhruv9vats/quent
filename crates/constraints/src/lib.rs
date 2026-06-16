@@ -5,8 +5,11 @@
 
 pub mod utils;
 
+mod recursive_record;
 mod unregistered_constraints;
 mod unresolved_refs;
+
+use std::{error::Error, fmt::Display};
 
 use quent_schema::{Schema, visitor::Visitor};
 
@@ -37,13 +40,40 @@ pub trait Constraint: Visitor + Default {
     const NAME: &'static str;
 }
 
+/// Errors surfaced from validating base constraints.
+///
+/// Base constraints are constraints that cause the non-annotated parts of the
+/// schema to be internally inconsistent.
+#[derive(Debug)]
+pub struct BaseConstraintsError {
+    /// Invalid references
+    pub invalid_references: Vec<String>,
+    /// Records that are recursive
+    pub recursive_records: Vec<String>,
+}
+impl Display for BaseConstraintsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "base constraints failed to validate:\n{}",
+            &[
+                utils::bullet_list(&self.invalid_references),
+                utils::bullet_list(&self.recursive_records)
+            ]
+            .join("\n")
+        )
+    }
+}
+impl Error for BaseConstraintsError {}
+
 /// The outcome of [`validate`].
+#[derive(Debug)]
 pub struct Report<R> {
+    /// The result of validating base constraints.
+    pub base_constraints: Result<(), BaseConstraintsError>,
     /// Constraint names referenced by the schema that no validated constraint
     /// handles.
     pub unregistered_constraints: Vec<String>,
-    /// Invalid references
-    pub invalid_references: Vec<String>,
     /// Each constraint's own result, in tuple order matching the validated
     /// constraints.
     pub results: R,
@@ -52,8 +82,8 @@ pub struct Report<R> {
 /// Validates (a tuple of) [`Constraint`]s against `schema`.
 ///
 /// The returned validation [`Report`] always includes:
-/// - the result of an internal consistency check of the schema (i.e. internal
-///   references properly resolve)
+/// - [`base_constraints`](Report::base_constraints): the result of validating
+///   base constraints. These should ALWAYS pass.
 /// - a list of unregistered constraints
 ///
 /// Results from additional constraints are gathered in [`Report::results`].
@@ -83,21 +113,28 @@ pub struct Report<R> {
 /// #     SchemaBuilder::new(Identifier::try_new("MySchema").unwrap()).build();
 ///
 /// let report = validate::<(ConstraintA, ConstraintB)>(&schema);
+/// assert!(report.base_constraints.is_ok());
 /// let (result_a, result_b) = report.results;
 /// assert!(result_a.is_ok());
 /// assert!(result_b.is_ok());
 /// assert!(report.unregistered_constraints.is_empty());
-/// assert!(report.invalid_references.is_empty());
 /// ```
 pub fn validate<C: Constraints>(schema: &Schema) -> Report<C::Output> {
-    let (invalid_references, unregistered_constraints, results) = schema.walk((
+    let (invalid_references, unregistered_constraints, recursive_records, results) = schema.walk((
         unresolved_refs::UnresolvedReferences::default(),
         unregistered_constraints::UnregisteredConstraints::new(C::NAMES),
+        recursive_record::RecursiveRecords::default(),
         C::default(),
     ));
     Report {
         unregistered_constraints: unregistered_constraints.into_iter().collect(),
-        invalid_references,
+        base_constraints: match (invalid_references.len(), recursive_records.len()) {
+            (0, 0) => Ok(()),
+            _ => Err(BaseConstraintsError {
+                invalid_references,
+                recursive_records,
+            }),
+        },
         results,
     }
 }

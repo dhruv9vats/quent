@@ -7,6 +7,7 @@ use crate::schema::{annotations::Annotations, data_type::DataType, identifier::I
 /// [`crate::event::Event`].
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Field {
     /// The name of the field.
     name: Identifier,

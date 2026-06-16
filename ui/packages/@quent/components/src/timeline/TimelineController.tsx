@@ -128,7 +128,7 @@ export function TimelineController({
     );
 
     return {
-      boundaryGap: false,
+      boundaryGap: [0, 0] as [number, number],
       type: 'value',
       show: true,
       position: 'top',
@@ -160,7 +160,7 @@ export function TimelineController({
 
   const zoomXAxisOptions = useMemo(
     () => ({
-      boundaryGap: false,
+      boundaryGap: [0, 0] as [number, number],
       type: 'value',
       show: false,
       min: startTimeMillis,
@@ -203,6 +203,7 @@ export function TimelineController({
       top: CONTROLLER_GRID_TOP,
       bottom: CONTROLLER_GRID_BOTTOM,
       backgroundColor: controllerGridBackgroundColor,
+      outerBoundsMode: 'none',
     }),
     [controllerGridBackgroundColor]
   );

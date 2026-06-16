@@ -5,7 +5,7 @@
 
 use quent_constraints::{Constraint, utils::bullet_list};
 use quent_schema::{
-    DataType, Identifier,
+    Annotations, DataType, Identifier,
     visitor::{Cursor, Element, Visitor},
 };
 use serde::{Deserialize, Serialize};
@@ -13,9 +13,26 @@ use thiserror::Error;
 
 /// The entity type an entity reference is restricted to point at.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RefTarget {
-    /// Name of the entity type this reference must point at.
-    pub target: Identifier,
+pub struct RefTarget(Identifier);
+
+impl From<RefTarget> for Identifier {
+    fn from(ref_target: RefTarget) -> Self {
+        ref_target.0
+    }
+}
+
+impl AsRef<Identifier> for RefTarget {
+    fn as_ref(&self) -> &Identifier {
+        &self.0
+    }
+}
+
+impl RefTarget {
+    /// Return the reference target entity type declared on `annotations`, if any.
+    pub fn from_annotations(annotations: &Annotations) -> Option<Self> {
+        let raw = annotations.constraint(RefTargetConstraint::NAME)?.data()?;
+        serde_json::from_str(raw).ok()
+    }
 }
 
 /// Restricts the type of entities
@@ -33,30 +50,32 @@ impl Visitor for RefTargetConstraint {
     type Output = Result<(), RefTargetError>;
 
     fn visit(&mut self, cursor: &Cursor) {
-        if let Element::DataType(DataType::EntityRef { annotations, .. }) = cursor.current()
-            && let Some(constraint) = annotations.constraint(RefTargetConstraint::NAME)
-        {
-            let location = cursor.to_string();
-            match constraint.data() {
-                None => self.errors.push(RefTargetError::InvalidData {
-                    location,
-                    message: "constraint data is missing".to_string(),
-                }),
-                Some(raw) => match serde_json::from_str::<RefTarget>(raw) {
-                    Ok(ref_target) => {
-                        if cursor.root().entity(&ref_target.target).is_none() {
-                            self.errors.push(RefTargetError::UnknownTarget {
-                                location,
-                                target: ref_target.target,
-                            });
-                        }
+        let Element::DataType(DataType::EntityRef { annotations, .. }) = cursor.current() else {
+            return;
+        };
+        let Some(constraint) = annotations.constraint(RefTargetConstraint::NAME) else {
+            return;
+        };
+        let location = cursor.to_string();
+        match constraint.data() {
+            None => self.errors.push(RefTargetError::InvalidData {
+                location,
+                message: "constraint data is missing".to_string(),
+            }),
+            Some(raw) => match serde_json::from_str::<RefTarget>(raw) {
+                Ok(ref_target) => {
+                    if cursor.root().entity(ref_target.as_ref()).is_none() {
+                        self.errors.push(RefTargetError::UnknownTarget {
+                            location,
+                            target: ref_target.as_ref().clone(),
+                        });
                     }
-                    Err(e) => self.errors.push(RefTargetError::InvalidData {
-                        location,
-                        message: format!("failed to decode ref-target: {e}"),
-                    }),
-                },
-            }
+                }
+                Err(e) => self.errors.push(RefTargetError::InvalidData {
+                    location,
+                    message: format!("failed to decode ref-target: {e}"),
+                }),
+            },
         }
     }
 

@@ -75,6 +75,7 @@ export function TimelineRuler({ startTime, isDark, mode = 'relative' }: Timeline
         left: 1,
         top: RULER_GRID_TOP,
         bottom: 0,
+        outerBoundsMode: 'none',
       },
       xAxis: {
         type: 'value',
@@ -83,7 +84,7 @@ export function TimelineRuler({ startTime, isDark, mode = 'relative' }: Timeline
         min: zoomedStartMs,
         max: zoomedEndMs,
         interval,
-        boundaryGap: false,
+        boundaryGap: [0, 0] as [number, number],
         // Re-enable ticks (theme disables them by default); prominent color + extra length.
         axisTick: {
           show: true,

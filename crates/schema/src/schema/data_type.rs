@@ -6,6 +6,7 @@ use crate::schema::{annotations::Annotations, identifier::Identifier};
 /// Types of data values in [`crate::event::Event`]s and [`crate::record::Record`]s.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum DataType {
     Bool,
     Uuid,
