@@ -2244,6 +2244,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "quent-resource"
+version = "0.1.0"
+dependencies = [
+ "indexmap",
+ "quent-schema",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "quent-schema"
 version = "0.1.0"
 dependencies = [
