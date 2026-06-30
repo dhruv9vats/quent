@@ -4,11 +4,68 @@
 //! Build a [`ViewerSpec`] from a context's `model.qmi`: pinned git sources,
 //! analyzer package, and artifact format for generating/building a viewer.
 
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use quent_build_info::{ArtifactInfo, BuildInfo};
+use quent_build_info::{ArtifactInfo, BuildInfo, SIDECAR_FILE_NAME};
+use walkdir::WalkDir;
 
 use crate::error::{OpenError, Result};
+
+/// Recursively discover context directories (those containing a `model.qmi`
+/// sidecar) under the given `paths`. Hidden directories (dotfiles, e.g. `.git`)
+/// are skipped and symlinks are not followed (so the walk stays cycle-safe).
+/// Results are canonicalized and deduplicated, preserving discovery order.
+pub fn discover_contexts(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
+    let mut found = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for path in paths {
+        // `WalkDir` does not descend into symlinked directories (cycle-safe);
+        // `filter_entry` prunes hidden directories while keeping an explicitly-passed
+        // root.
+        let mut walk = WalkDir::new(path)
+            .into_iter()
+            .filter_entry(|entry| entry.depth() == 0 || !is_hidden(entry));
+        while let Some(entry) = walk.next() {
+            // Report (don't silently drop) traversal errors so a permission-denied
+            // subtree can't quietly shrink the discovered set; keep walking the rest.
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) => {
+                    eprintln!("warning: skipping unreadable path during discovery: {error}");
+                    continue;
+                }
+            };
+            // `Path::is_dir` follows symlinks, so a context reached via a symlinked
+            // argument (or directory) is still recognized, even though the walk
+            // itself never descends through the link.
+            if entry.path().is_dir() && entry.path().join(SIDECAR_FILE_NAME).is_file() {
+                let canonical = entry.path().canonicalize()?;
+                if seen.insert(canonical.clone()) {
+                    found.push(canonical);
+                }
+                // A context is a leaf: skip its entity dirs and event streams so
+                // discovery scales with the directory tree, not the payload size.
+                // Skip only for directories `WalkDir` actually descends into: a
+                // real directory, or the root (followed even when it is a symlink).
+                // A non-root symlinked context isn't descended, and skipping it
+                // would instead drop the symlink's (un-walked) siblings.
+                if entry.depth() == 0 || entry.file_type().is_dir() {
+                    walk.skip_current_dir();
+                }
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// Whether a walked entry is hidden (its file name starts with `.`).
+fn is_hidden(entry: &walkdir::DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .is_some_and(|name| name.starts_with('.'))
+}
 
 /// Serialization format of an artifact's event streams.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,11 +140,10 @@ impl GitPin {
     }
 }
 
-/// Everything needed to generate and build a viewer for one context directory.
+/// Viewer build inputs; contexts are tracked separately because one viewer can
+/// serve multiple same-spec contexts.
 #[derive(Debug, Clone)]
 pub struct ViewerSpec {
-    /// The context directory holding the per-entity event streams.
-    pub root: PathBuf,
     /// Event serialization format, detected from the on-disk streams.
     pub format: Format,
     /// Cargo package of the analyzer crate providing `Viewer` (`QuentViewer`).
@@ -109,7 +165,6 @@ impl ViewerSpec {
                     model: info.model.name.clone(),
                 })?;
         Ok(Self {
-            root: root.to_path_buf(),
             format: detect_format(root)?,
             analyzer_package,
             quent: GitPin::from_build_info(&info.quent, "quent")?,
@@ -123,15 +178,49 @@ impl ViewerSpec {
         self.analyzer_package.replace('-', "_")
     }
 
-    /// Stable directory name for caching this viewer's generated crate and build,
-    /// keyed on everything that affects the build output.
-    pub fn cache_key(&self) -> String {
+    /// Unambiguous build identity: analyzer package, format, and both git
+    /// remotes + full commits. Used to group/dedup contexts into viewers.
+    /// Short label distinguishing this build from other groups (package, format,
+    /// and short pins) so concurrent viewers with equal context counts are
+    /// still tellable apart.
+    pub fn describe(&self) -> String {
         format!(
-            "{}-{}-{}-{}",
+            "{} ({}, quent@{} analyzer@{})",
+            self.analyzer_package,
+            self.format.extension(),
+            short_commit(&self.quent.commit),
+            short_commit(&self.analyzer.commit),
+        )
+    }
+
+    pub fn group_key(&self) -> String {
+        // Key on the Cargo-normalized remotes so equivalent spellings (e.g.
+        // scp-style vs `ssh://`) — which produce one dependency — share a build
+        // instead of splitting into separate viewers. Unit separator between
+        // fields so values can't run together.
+        [
+            self.analyzer_package.as_str(),
+            self.format.extension(),
+            self.quent.cargo_url().as_str(),
+            &self.quent.commit,
+            self.analyzer.cargo_url().as_str(),
+            &self.analyzer.commit,
+        ]
+        .join("\u{1f}")
+    }
+
+    /// Filesystem-safe cache dir for this generated crate/build: readable prefix
+    /// plus [`group_key`](Self::group_key) hash, so distinct builds never share a
+    /// directory even when short commits or package names match.
+    pub fn cache_key(&self) -> String {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.group_key().hash(&mut hasher);
+        format!(
+            "{}-{}-{}-{:016x}",
             self.analyzer_package,
             short_commit(&self.analyzer.commit),
-            short_commit(&self.quent.commit),
             self.format.extension(),
+            hasher.finish(),
         )
     }
 }
@@ -199,6 +288,110 @@ mod tests {
         dir
     }
 
+    fn make_context(dir: &Path) {
+        std::fs::create_dir_all(dir.join("engine")).unwrap();
+        std::fs::write(dir.join("engine").join("events.ndjson"), b"").unwrap();
+        std::fs::write(dir.join(SIDECAR_FILE_NAME), b"{}").unwrap();
+    }
+
+    #[test]
+    fn discover_finds_nested_contexts_and_skips_hidden() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        make_context(&root.join("a"));
+        make_context(&root.join("nested/b"));
+        make_context(&root.join(".hidden/c")); // under a dotdir: must be skipped
+
+        let found = discover_contexts(&[root.to_path_buf()]).unwrap();
+        let mut names: Vec<String> = found
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(names, vec!["a", "b"]);
+
+        // Passing a context directory directly yields just it.
+        let direct = discover_contexts(&[root.join("a")]).unwrap();
+        assert_eq!(direct.len(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn discovers_context_through_symlinked_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        make_context(&tmp.path().join("real"));
+        let link = tmp.path().join("link");
+        std::os::unix::fs::symlink(tmp.path().join("real"), &link).unwrap();
+
+        // A symlink pointing straight at a context must still be recognized.
+        let found = discover_contexts(&[link]).unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].file_name().unwrap(), "real");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_context_does_not_hide_siblings() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        make_context(&root.join("target"));
+        make_context(&root.join("sibling"));
+        // A non-root symlink straight to a context must not let `skip_current_dir`
+        // prune the symlink's (un-walked) siblings.
+        std::os::unix::fs::symlink(root.join("target"), root.join("link")).unwrap();
+
+        let found = discover_contexts(&[root.to_path_buf()]).unwrap();
+        let mut names: Vec<String> = found
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        // `link` canonicalizes to `target`, so the set is {sibling, target}.
+        assert_eq!(names, vec!["sibling", "target"]);
+    }
+
+    #[test]
+    fn group_key_normalizes_equivalent_remotes() {
+        let scp = ViewerSpec {
+            format: Format::Ndjson,
+            analyzer_package: "p".into(),
+            quent: GitPin {
+                remote: "git@github.com:org/quent.git".into(),
+                commit: "c".into(),
+            },
+            analyzer: GitPin {
+                remote: "git@github.com:org/a.git".into(),
+                commit: "d".into(),
+            },
+        };
+        let ssh = ViewerSpec {
+            quent: GitPin {
+                remote: "ssh://git@github.com/org/quent.git".into(),
+                commit: "c".into(),
+            },
+            analyzer: GitPin {
+                remote: "ssh://git@github.com/org/a.git".into(),
+                commit: "d".into(),
+            },
+            ..scp.clone()
+        };
+        assert_eq!(scp.group_key(), ssh.group_key());
+        assert_eq!(scp.cache_key(), ssh.cache_key());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn discovery_does_not_follow_symlink_cycles() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        make_context(&root.join("a"));
+        // A symlink back to the root would loop a naive recursive walk.
+        std::os::unix::fs::symlink(root, root.join("loop")).unwrap();
+
+        let found = discover_contexts(&[root.to_path_buf()]).unwrap(); // must terminate
+        assert_eq!(found.len(), 1);
+    }
+
     #[test]
     fn detects_format_from_entity_subdir() {
         let ctx = ctx_with_stream("engine", "events.msgpack");
@@ -245,16 +438,36 @@ mod tests {
     }
 
     #[test]
-    fn spec_derives_crate_ident_and_cache_key() {
+    fn spec_derives_crate_ident_and_keys() {
         let ctx = ctx_with_stream("engine", "events.ndjson");
         let info = artifact_with(Some("quent-simulator-analyzer"), "feedface99887766");
         let spec = ViewerSpec::from_artifact(ctx.path(), &info).unwrap();
         assert_eq!(spec.analyzer_crate(), "quent_simulator_analyzer");
         assert_eq!(spec.format, Format::Ndjson);
-        // commit is truncated to 12 chars in the key.
-        assert_eq!(
-            spec.cache_key(),
-            "quent-simulator-analyzer-feedface9988-0123456789ab-ndjson"
+        assert!(
+            spec.cache_key()
+                .starts_with("quent-simulator-analyzer-feedface9988-ndjson-")
         );
+    }
+
+    #[test]
+    fn keys_distinguish_full_pins_not_just_short_commit() {
+        let ctx = ctx_with_stream("engine", "events.ndjson");
+        // Same package, format, and 12-char commit prefix, but different full
+        // analyzer commits — must NOT collide.
+        let a =
+            ViewerSpec::from_artifact(ctx.path(), &artifact_with(Some("p"), "abcabcabcabc1111"))
+                .unwrap();
+        let b =
+            ViewerSpec::from_artifact(ctx.path(), &artifact_with(Some("p"), "abcabcabcabc2222"))
+                .unwrap();
+        assert_ne!(a.group_key(), b.group_key());
+        assert_ne!(a.cache_key(), b.cache_key());
+        // Identical inputs group together and are deterministic.
+        let a2 =
+            ViewerSpec::from_artifact(ctx.path(), &artifact_with(Some("p"), "abcabcabcabc1111"))
+                .unwrap();
+        assert_eq!(a.group_key(), a2.group_key());
+        assert_eq!(a.cache_key(), a2.cache_key());
     }
 }
