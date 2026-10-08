@@ -48,15 +48,22 @@ export function resolveDagHighlightedNodeIds(
   if (!highlightedNodeIds || highlightedNodeIds.size === 0) {
     return null;
   }
+  const resolved = new Set(highlightedNodeIds);
+  let intersectsDag = false;
   for (const node of nodes) {
     if (highlightedNodeIds.has(node.id)) {
-      return highlightedNodeIds;
+      intersectsDag = true;
     }
     for (const relatedOperatorId of getRelatedOperatorIds(node)) {
       if (highlightedNodeIds.has(relatedOperatorId)) {
-        return highlightedNodeIds;
+        resolved.add(node.id);
+        intersectsDag = true;
+        break;
       }
     }
   }
-  return null;
+  if (!intersectsDag) {
+    return null;
+  }
+  return resolved.size > highlightedNodeIds.size ? resolved : highlightedNodeIds;
 }

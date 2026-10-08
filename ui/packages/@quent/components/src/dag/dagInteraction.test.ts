@@ -52,7 +52,7 @@ describe('resolveDagHighlightedNodeIds', () => {
 
   it('keeps highlights that target a displayed node’s related operator', () => {
     const highlighted = new Set(['a']);
-    expect(resolveDagHighlightedNodeIds(highlighted, NODES)).toBe(highlighted);
+    expect(resolveDagHighlightedNodeIds(highlighted, NODES)).toEqual(new Set(['a', 'grouped']));
   });
 
   it('clears highlights that do not affect this DAG', () => {
