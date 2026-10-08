@@ -102,6 +102,10 @@ export function QueryResourceTree({
     ...(resourceTree.highlightedItemIds ?? []),
     ...(nvtxTree.highlightedItemIds ?? []),
   ]);
+  const indicatorItemIds = new Set([
+    ...(resourceTree.indicatorItemIds ?? []),
+    ...(nvtxTree.indicatorItemIds ?? []),
+  ]);
   const hasFilterMatches = resourceTree.filterMatchCount + nvtxTree.filterMatchCount > 0;
   const trees =
     resourceTree.isFilterActive && resourceTree.showOthers && !hasFilterMatches
@@ -113,7 +117,7 @@ export function QueryResourceTree({
       durationSeconds={durationSeconds}
       isDark={isDark}
       trees={trees}
-      controls={{ ...resourceTree, highlightedItemIds }}
+      controls={{ ...resourceTree, highlightedItemIds, indicatorItemIds }}
     >
       <EntityDetailDrawer
         fsm={drawerFsm}

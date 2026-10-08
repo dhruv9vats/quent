@@ -93,7 +93,7 @@ export function useResourceTimelinesTreeModel({
     () => transformResourceTree(entities, resourceTree),
     [resourceTree, entities]
   );
-  const operatorHighlightedItemIds = useHighlightedItemIds(rootItem);
+  const indicatorItemIds = useHighlightedItemIds(rootItem);
   const resourceFilterResult = useMemo(
     () => filterResourceTree(rootItem, entities, deferredResourceFilter),
     [deferredResourceFilter, entities, rootItem]
@@ -105,18 +105,10 @@ export function useResourceTimelinesTreeModel({
   );
   const highlightedItemIds = useMemo(
     () =>
-      new Set([
-        ...(operatorHighlightedItemIds ?? []),
-        ...(resourceFilterResult.isActive && resourceFilter.showOthers
-          ? resourceFilterResult.directMatchIds
-          : []),
-      ]),
-    [
-      operatorHighlightedItemIds,
-      resourceFilter.showOthers,
-      resourceFilterResult.directMatchIds,
-      resourceFilterResult.isActive,
-    ]
+      resourceFilterResult.isActive && resourceFilter.showOthers
+        ? resourceFilterResult.directMatchIds
+        : new Set<string>(),
+    [resourceFilter.showOthers, resourceFilterResult.directMatchIds, resourceFilterResult.isActive]
   );
   const resourceTypeOptions = useMemo(
     () => Object.keys(entities.resource_types).sort(),
@@ -344,6 +336,7 @@ export function useResourceTimelinesTreeModel({
     initialSelectedItemId: rootItem.id,
     expandedIds,
     highlightedItemIds,
+    indicatorItemIds,
     timelineData: fetchedRootTimeline,
     onExpandChange,
     onZoomChange: handleZoomChange,

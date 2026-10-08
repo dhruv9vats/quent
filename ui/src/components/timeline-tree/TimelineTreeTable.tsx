@@ -40,6 +40,7 @@ export interface TimelineTreeControls {
   initialSelectedItemId?: string;
   expandedIds: Set<string>;
   highlightedItemIds?: Set<string>;
+  indicatorItemIds?: Set<string>;
   timelineData?: SingleTimelineResponse;
   onExpandChange: (itemId: string, isExpanded: boolean) => void;
   onZoomChange?: (range: ZoomRange) => void;
@@ -165,6 +166,7 @@ export function TimelineTreeTable({
             columnWidths={[275, 'auto']}
             onExpandChange={controls.onExpandChange}
             highlightedItemIds={controls.highlightedItemIds}
+            indicatorItemIds={controls.indicatorItemIds}
             controlledExpandedIds={controls.expandedIds}
             virtualized
             rowHeight={DEFAULT_TIMELINE_HEIGHT}

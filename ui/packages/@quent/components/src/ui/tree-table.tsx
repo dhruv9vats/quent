@@ -47,6 +47,12 @@ type FlatTreeRow = {
 const rowSurfaceClasses =
   'relative cursor-pointer transition-colors hover:bg-secondary/10 data-[selected=true]:bg-secondary/70';
 
+// Thin left-edge accent bar used to indicate a row's relation to a hovered
+// query plan operator
+const RowIndicatorBar = () => (
+  <div aria-hidden="true" className="absolute left-0 inset-y-0 w-0.5 bg-primary" />
+);
+
 // Tree-table specific AccordionTrigger with level-based positioning.
 // Rendered as a <div> via asChild to avoid nesting <button> inside <button>
 // (the column content may contain interactive controls like Select).
@@ -56,39 +62,46 @@ const AccordionTrigger = React.forwardRef<
     level?: number;
     isSelected?: boolean;
     isOpen?: boolean;
+    isIndicated?: boolean;
   }
->(({ className, children, level = 0, isOpen, isSelected: _isSelected, ...props }, ref) => {
-  const chevronLeft = 10 + level * 20;
+>(
+  (
+    { className, children, level = 0, isOpen, isSelected: _isSelected, isIndicated, ...props },
+    ref
+  ) => {
+    const chevronLeft = 10 + level * 20;
 
-  const chevronAttr = isOpen ? 'true' : 'false';
-  const chevronTransform = isOpen ? 'translateY(-50%) rotate(90deg)' : 'translateY(-50%)';
+    const chevronAttr = isOpen ? 'true' : 'false';
+    const chevronTransform = isOpen ? 'translateY(-50%) rotate(90deg)' : 'translateY(-50%)';
 
-  return (
-    <AccordionPrimitive.Header className="w-full relative">
-      <AccordionPrimitive.Trigger asChild {...props}>
-        <div
-          ref={ref}
-          className={cn(
-            `group flex items-center transition-all text-foreground w-full min-w-0 overflow-hidden px-0 relative outline-none ${rowSurfaceClasses}`,
-            className
-          )}
-          tabIndex={0}
-        >
-          <div className="w-2.5 shrink-0" />
-          <ChevronRight
-            className="h-4 w-4 shrink-0 transition-transform duration-200 chevron-icon absolute top-1/2 text-muted-foreground"
-            data-open={chevronAttr}
-            style={{
-              left: `${chevronLeft}px`,
-              transform: chevronTransform,
-            }}
-          />
-          <div className="ml-6 flex-1 min-w-0 overflow-hidden">{children}</div>
-        </div>
-      </AccordionPrimitive.Trigger>
-    </AccordionPrimitive.Header>
-  );
-});
+    return (
+      <AccordionPrimitive.Header className="w-full relative">
+        <AccordionPrimitive.Trigger asChild {...props}>
+          <div
+            ref={ref}
+            className={cn(
+              `group flex items-center transition-all text-foreground w-full min-w-0 overflow-hidden px-0 relative outline-none ${rowSurfaceClasses}`,
+              className
+            )}
+            tabIndex={0}
+          >
+            {isIndicated && <RowIndicatorBar />}
+            <div className="w-2.5 shrink-0" />
+            <ChevronRight
+              className="h-4 w-4 shrink-0 transition-transform duration-200 chevron-icon absolute top-1/2 text-muted-foreground"
+              data-open={chevronAttr}
+              style={{
+                left: `${chevronLeft}px`,
+                transform: chevronTransform,
+              }}
+            />
+            <div className="ml-6 flex-1 min-w-0 overflow-hidden">{children}</div>
+          </div>
+        </AccordionPrimitive.Trigger>
+      </AccordionPrimitive.Header>
+    );
+  }
+);
 AccordionTrigger.displayName = AccordionPrimitive.Trigger.displayName;
 
 const AccordionContent = React.forwardRef<
@@ -156,6 +169,7 @@ const TreeNode = ({
   renderItem,
   onExpandChange,
   highlightedItemIds,
+  indicatorItemIds,
   level = 0,
 }: {
   item: TreeTableDataItem;
@@ -173,6 +187,7 @@ const TreeNode = ({
   renderItem?: (params: TreeTableRenderItemParams) => React.ReactNode;
   onExpandChange?: (itemId: string, isExpanded: boolean) => void;
   highlightedItemIds?: Set<string>;
+  indicatorItemIds?: Set<string>;
   level?: number;
 }) => {
   const itemExpanded = (item as { expanded?: boolean }).expanded;
@@ -194,6 +209,7 @@ const TreeNode = ({
   const isSelected = selectedItemId === item.id;
   const isOpen = value.includes(item.id);
   const isHighlighted = highlightedItemIds?.has(item.id) ?? false;
+  const isIndicated = indicatorItemIds?.has(item.id) ?? false;
   const handleValueChange = useCallback(
     (newValue: string[]) => {
       const wasExpanded = value.includes(item.id);
@@ -215,6 +231,7 @@ const TreeNode = ({
           level={level}
           isSelected={isSelected}
           isOpen={isOpen}
+          isIndicated={isIndicated}
           className={cn(
             treeVariants(),
             isSelected && selectedTreeVariants(),
@@ -259,6 +276,7 @@ const TreeNode = ({
             renderItem={renderItem}
             onExpandChange={onExpandChange}
             highlightedItemIds={highlightedItemIds}
+            indicatorItemIds={indicatorItemIds}
             level={level + 1}
           />
         </AccordionContent>
@@ -278,6 +296,7 @@ const TreeLeaf = React.forwardRef<
     defaultLeafIcon?: IconComponent;
     renderItem?: (params: TreeTableRenderItemParams) => React.ReactNode;
     highlightedItemIds?: Set<string>;
+    indicatorItemIds?: Set<string>;
   }
 >(
   (
@@ -290,12 +309,14 @@ const TreeLeaf = React.forwardRef<
       defaultLeafIcon,
       renderItem,
       highlightedItemIds,
+      indicatorItemIds,
       ...props
     },
     ref
   ) => {
     const isSelected = selectedItemId === item.id;
     const isHighlighted = highlightedItemIds?.has(item.id) ?? false;
+    const isIndicated = indicatorItemIds?.has(item.id) ?? false;
 
     return (
       <div
@@ -317,6 +338,7 @@ const TreeLeaf = React.forwardRef<
         }}
         {...props}
       >
+        {isIndicated && <RowIndicatorBar />}
         {renderItem ? (
           <>
             <div className="w-2.5 shrink-0" />
@@ -356,6 +378,7 @@ type TreeItemProps = {
   renderItem?: (params: TreeTableRenderItemParams) => React.ReactNode;
   onExpandChange?: (itemId: string, isExpanded: boolean) => void;
   highlightedItemIds?: Set<string>;
+  indicatorItemIds?: Set<string>;
   level?: number;
   className?: string;
 };
@@ -374,6 +397,7 @@ const TreeItem = React.forwardRef<HTMLDivElement, TreeItemProps>(
       renderItem,
       onExpandChange,
       highlightedItemIds,
+      indicatorItemIds,
       level,
       ...props
     },
@@ -400,6 +424,7 @@ const TreeItem = React.forwardRef<HTMLDivElement, TreeItemProps>(
                   renderItem={renderItem}
                   onExpandChange={onExpandChange}
                   highlightedItemIds={highlightedItemIds}
+                  indicatorItemIds={indicatorItemIds}
                 />
               ) : (
                 <TreeLeaf
@@ -410,6 +435,7 @@ const TreeItem = React.forwardRef<HTMLDivElement, TreeItemProps>(
                   defaultLeafIcon={defaultLeafIcon}
                   renderItem={renderItem}
                   highlightedItemIds={highlightedItemIds}
+                  indicatorItemIds={indicatorItemIds}
                 />
               )}
             </li>
@@ -432,6 +458,11 @@ type TreeViewProps = React.HTMLAttributes<HTMLDivElement> & {
   defaultLeafIcon?: IconComponent;
   renderItem?: (params: TreeTableRenderItemParams) => React.ReactNode;
   highlightedItemIds?: Set<string>;
+  /**
+   * Rows in this set render a left accent bar — a lighter-weight indicator for
+   * relations that update frequently (e.g. hovering a query plan operator).
+   */
+  indicatorItemIds?: Set<string>;
   /**
    * Required when `virtualized` is true: the scroll container whose `scrollTop`
    * and `clientHeight` drive the visible row window.
@@ -539,6 +570,7 @@ const VirtualizedTreeView = React.forwardRef<HTMLDivElement, TreeViewProps>(
       className,
       renderItem,
       highlightedItemIds,
+      indicatorItemIds,
       scrollContainerRef,
       controlledExpandedIds,
       virtualized: _virtualized,
@@ -605,6 +637,7 @@ const VirtualizedTreeView = React.forwardRef<HTMLDivElement, TreeViewProps>(
             const { item, level, hasChildren, isOpen } = visibleRows[virtualRow.index]!;
             const isSelected = selectedItemId === item.id;
             const isHighlighted = highlightedItemIds?.has(item.id) ?? false;
+            const isIndicated = indicatorItemIds?.has(item.id) ?? false;
             const chevronTransform = isOpen ? 'translateY(-50%) rotate(90deg)' : 'translateY(-50%)';
             const chevronLeft = 10 + level * 20;
 
@@ -653,6 +686,7 @@ const VirtualizedTreeView = React.forwardRef<HTMLDivElement, TreeViewProps>(
                   item.onClick?.();
                 }}
               >
+                {isIndicated && <RowIndicatorBar />}
                 <div className="w-2.5 shrink-0" />
                 {hasChildren ? (
                   <ChevronRight
@@ -701,6 +735,7 @@ const RecursiveTreeView = React.forwardRef<HTMLDivElement, TreeViewProps>(
       className,
       renderItem,
       highlightedItemIds,
+      indicatorItemIds,
       controlledExpandedIds,
       // Virtualization-only props are not used here but should not leak onto
       // the underlying DOM via {...props}.
@@ -742,6 +777,7 @@ const RecursiveTreeView = React.forwardRef<HTMLDivElement, TreeViewProps>(
           renderItem={renderItem}
           onExpandChange={onExpandChange}
           highlightedItemIds={highlightedItemIds}
+          indicatorItemIds={indicatorItemIds}
           {...props}
         />
       </div>
