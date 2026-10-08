@@ -1,21 +1,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { aggregateNumericValues, getAggregateValue } from '@quent/utils';
+import { aggregateToNumber } from '@quent/utils';
 import type { HoveredStatInfo } from '../atoms/dagControls';
-
-export interface ResolvedHoveredStatValue {
-  value: number;
-  /**
-   * 'direct' when the operator itself had an entry in the hovered stat
-   * (e.g. a physical operator that's also a pivot-table row); 'aggregated'
-   * when it was derived from related operators (e.g. a logical-plan node).
-   * Aggregated values live on a different scale than raw item values (a sum
-   * across several operators routinely exceeds any single item's max), so
-   * callers must derive a range from every resolved value they display.
-   */
-  source: 'direct' | 'aggregated';
-}
 
 /**
  * Resolves the hovered-stat value for a DAG node. Physical operators that
@@ -24,36 +11,24 @@ export interface ResolvedHoveredStatValue {
  * physical operators doing the work) have no entry of their own, so their
  * value is derived by aggregating their related operators' values with
  * `hoveredStat.aggMode`.
+ *
+ * Aggregated values are on a different scale than raw item values (a sum
+ * across operators can exceed any single item's max), so callers must derive
+ * a color range from every resolved value they display, not from
+ * `hoveredStat.min`/`max`.
  */
 export function resolveHoveredStatValue(
   hoveredStat: HoveredStatInfo,
   operatorId: string,
   relatedOperatorIds: readonly string[] = []
-): ResolvedHoveredStatValue | undefined {
+): number | undefined {
   const direct = hoveredStat.values.get(operatorId);
   if (direct !== undefined) {
-    return { value: direct, source: 'direct' };
+    return direct;
   }
-  if (relatedOperatorIds.length === 0) {
-    return undefined;
-  }
-  const values: number[] = [];
-  for (const id of relatedOperatorIds) {
+  const related = relatedOperatorIds.flatMap(id => {
     const v = hoveredStat.values.get(id);
-    if (v !== undefined) {
-      values.push(v);
-    }
-  }
-  if (values.length === 0) {
-    return undefined;
-  }
-  const aggregates = aggregateNumericValues(values);
-  if (!aggregates) {
-    return undefined;
-  }
-  const value = getAggregateValue(aggregates, hoveredStat.aggMode);
-  if (value === null) {
-    return undefined;
-  }
-  return { value: Number(value), source: 'aggregated' };
+    return v === undefined ? [] : [v];
+  });
+  return aggregateToNumber(related, hoveredStat.aggMode);
 }

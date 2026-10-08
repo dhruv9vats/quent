@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from 'vitest';
-import { aggregateNumericValues, getAggregateValue } from './statAggregation';
+import { aggregateNumericValues, aggregateToNumber, getAggregateValue } from './statAggregation';
 
 describe('aggregateNumericValues', () => {
   it('computes number aggregates with sample standard deviation', () => {
@@ -56,5 +56,21 @@ describe('getAggregateValue', () => {
     ['stdev', 2],
   ] as const)('selects the %s aggregate', (mode, expected) => {
     expect(getAggregateValue(aggregates, mode)).toBe(expected);
+  });
+});
+
+describe('aggregateToNumber', () => {
+  it('aggregates values with the requested mode as a plain number', () => {
+    expect(aggregateToNumber([2, 4n, 6], 'sum')).toBe(12);
+    expect(aggregateToNumber([2, 4, 6], 'mean')).toBe(4);
+    expect(aggregateToNumber([2n, 6n], 'max')).toBe(6);
+  });
+
+  it('returns undefined for no values', () => {
+    expect(aggregateToNumber([], 'sum')).toBeUndefined();
+  });
+
+  it('returns undefined when the mode has no value (stdev of one item)', () => {
+    expect(aggregateToNumber([5], 'stdev')).toBeUndefined();
   });
 });

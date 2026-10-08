@@ -30,12 +30,12 @@ export function resolveDagHeatmap(
   let max = -Infinity;
   for (const node of nodes) {
     const resolved = resolveHoveredStatValue(hoveredStat, node.id, getRelatedOperatorIds(node));
-    if (!resolved) {
+    if (resolved === undefined) {
       continue;
     }
-    values.set(node.id, resolved.value);
-    min = Math.min(min, resolved.value);
-    max = Math.max(max, resolved.value);
+    values.set(node.id, resolved);
+    min = Math.min(min, resolved);
+    max = Math.max(max, resolved);
   }
 
   return values.size > 0 ? { values, range: { min, max } } : null;

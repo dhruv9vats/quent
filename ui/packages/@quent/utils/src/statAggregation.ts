@@ -86,3 +86,20 @@ export function getAggregateValue(
       return aggregates.sum;
   }
 }
+
+/**
+ * Aggregates values with `mode` and returns the result as a plain number, or
+ * `undefined` when there are no values or the mode has no result (e.g. sample
+ * standard deviation of a single value).
+ */
+export function aggregateToNumber(
+  values: Iterable<number | bigint>,
+  mode: AggMode
+): number | undefined {
+  const aggregates = aggregateNumericValues(values);
+  if (!aggregates) {
+    return undefined;
+  }
+  const value = getAggregateValue(aggregates, mode);
+  return value === null ? undefined : Number(value);
+}

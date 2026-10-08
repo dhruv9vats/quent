@@ -25,7 +25,7 @@ import {
   useColorResolver,
 } from '@quent/hooks';
 import { formatStatWithQuantity, type QuantitySpec } from '@quent/utils';
-import { parseCustomStatistics } from '../lib/queryBundle.utils';
+import { resolveOperatorStat } from '../lib/queryBundle.utils';
 import { DataText } from '../ui/data-text';
 import { NodeFlowBar } from './NodeFlowBar';
 import { getNodeOpacityClass } from './nodeOpacity';
@@ -87,7 +87,6 @@ export const QueryPlanNode = memo(({ data }: { data: QueryPlanNodeData }) => {
   const operatorId = data.metadata?.rawNode?.id ?? data.nodeId;
   const highlightedNodeIds = data.highlightedNodeIds ?? null;
   const isHighlighted = highlightedNodeIds?.has(operatorId) === true;
-  const statistics = parseCustomStatistics(data.metadata?.rawNode);
   const { quantitySpecs } = data;
   const [nodeLabelField] = useSelectedNodeLabelField();
   const { fieldColor, isDimmed, isSelected, colorField } = useNodeColoring(
@@ -107,7 +106,9 @@ export const QueryPlanNode = memo(({ data }: { data: QueryPlanNodeData }) => {
     return data.label;
   }, [nodeLabelField, data]);
 
-  const colorFieldStat = colorField ? statistics.find(s => s.key === colorField) : null;
+  const colorFieldStat = colorField
+    ? resolveOperatorStat(data.metadata?.rawNode, data.metadata?.relatedOperators, colorField)
+    : undefined;
   const colorFieldValue = colorFieldStat?.value ?? null;
   const formattedColorFieldValue =
     colorFieldValue === null

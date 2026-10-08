@@ -1,7 +1,13 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { EntityRefKey, unwrapTaggedValue } from '@quent/utils';
+import {
+  EntityRefKey,
+  aggregateToNumber,
+  isNumericValue,
+  unwrapTaggedValue,
+  type AggMode,
+} from '@quent/utils';
 import { QueryEntities, Operator } from '@quent/utils';
 import { StatValue } from '../services/query-plan/types';
 
@@ -43,6 +49,50 @@ export function parseCustomStatistics(
       ...(quantity !== null ? { quantity } : {}),
     };
   });
+}
+
+export interface ResolvedOperatorStat {
+  value: StatValue;
+  quantity?: string;
+}
+
+/**
+ * Resolves a node's value for a statistic. A node's own statistic wins; a
+ * node that groups other operators (e.g. a logical-plan node) has none, so
+ * its numeric value is aggregated from the related operators with `aggMode`
+ * (the same rule the pivot table column hover uses). Non-numeric statistics
+ * are never aggregated.
+ */
+export function resolveOperatorStat(
+  rawNode: unknown,
+  relatedOperators: readonly unknown[] | undefined,
+  field: string,
+  aggMode: AggMode = 'sum'
+): ResolvedOperatorStat | undefined {
+  const own = parseCustomStatistics(rawNode).find(s => s.key === field);
+  if (own?.value != null) {
+    return {
+      value: own.value,
+      ...(own.quantity !== undefined ? { quantity: own.quantity } : {}),
+    };
+  }
+  const related = (relatedOperators ?? []).flatMap(operator => {
+    const stat = parseCustomStatistics(operator).find(s => s.key === field);
+    return stat?.value != null && isNumericValue(stat.value) ? [stat] : [];
+  });
+  const value = aggregateToNumber(
+    related.map(s => s.value as number | bigint),
+    aggMode
+  );
+  if (value === undefined) {
+    return undefined;
+  }
+  const quantity = related[0]?.quantity;
+  const hasConsistentQuantity = related.every(stat => stat.quantity === quantity);
+  return {
+    value,
+    ...(hasConsistentQuantity && quantity !== undefined ? { quantity } : {}),
+  };
 }
 
 export function parsePortStatistics(rawPort: unknown): Array<{ key: string; value: StatValue }> {
