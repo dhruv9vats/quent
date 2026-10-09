@@ -18,7 +18,6 @@ pub mod tree;
 ///
 /// The capacity is based on intuition rather than measurements.
 const INLINE_USAGE_CAPACITY: usize = 3;
-const NANOSECONDS_PER_SECOND: f64 = 1_000_000_000.0;
 
 /// Trait for types that are considered a [`Resource`].
 pub trait Resource: Entity {}
@@ -76,11 +75,11 @@ pub enum CapacityType {
 }
 
 impl CapacityType {
-    /// Interpret a value from a [`CapacityValue`] based on this [`CapacityType`].
+    /// Interpret a capacity value as occupancy or items per nanosecond.
     pub fn reinterpret_capacity_value(&self, value: u64, span: SpanNanoSec) -> f64 {
         match self {
             CapacityType::Occupancy => value as f64,
-            CapacityType::Rate => value as f64 * NANOSECONDS_PER_SECOND / span.duration() as f64,
+            CapacityType::Rate => value as f64 / span.duration() as f64,
         }
     }
 }
